@@ -5,12 +5,16 @@ include(GNUInstallDirs)
 set(CMAKE_CXX_STANDARD 20)
 
 add_library(sea_current INTERFACE)
+target_include_directories(sea_current
+  INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/examples>
+    $<INSTALL_INTERFACE:include>
+)
 
-# install(
-#   TARGETS sea_current
-#   # EXPORT install_targets
-# )
-
+find_package(Eigen3 3.4)
+target_link_libraries(sea_current INTERFACE
+    Eigen3::Eigen
+)
 
 # examples
 add_executable(test examples/test.cpp)

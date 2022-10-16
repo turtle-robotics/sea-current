@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <unsupported/Eigen/FFT>
 
 namespace turtle {
     namespace sc {
