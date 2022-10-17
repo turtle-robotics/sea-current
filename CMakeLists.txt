@@ -16,7 +16,7 @@ target_link_libraries(sea_current INTERFACE
     Eigen3::Eigen
 )
 
-# examples
+# tests
 add_executable(test examples/test.cpp)
 target_link_libraries(test PRIVATE sea_current)
 set_target_properties(test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")

@@ -32,8 +32,8 @@ namespace turtle::sc {
             bezier_spline(std::vector<Vector2f>& ctrl_pts, Matrix<float, Dynamic, 2>& pts);
             bezier_spline(std::vector<std::vector<Vector2f>>& ctrl_pts, Matrix<float, Dynamic, 2>& pts);
 
-            bezier_spline bezier_curve(std::vector<Vector2f>& ctrl_pts, std::vector<float>& positions) const;
-            bezier_spline bezier_curve(std::vector<Vector2f>& ctrl_pts, float precision) const;
+            static bezier_spline bezier_curve(std::vector<Vector2f>& ctrl_pts, std::vector<float>& positions);
+            static bezier_spline bezier_curve(std::vector<Vector2f>& ctrl_pts, float precision);
 
             static std::vector<Vector2f> transform_ctrl_pts(std::vector<Vector2f>& ctrl_pts);
             static std::vector<std::complex<float>> omega_table(int degree);
@@ -41,7 +41,7 @@ namespace turtle::sc {
 
     bezier_spline::bezier_spline(std::vector<std::vector<Vector2f>>& ctrl_pts, Matrix<float, Dynamic, 2>& pts) : ctrl_pts(ctrl_pts), pts(pts) {}
 
-    bezier_spline bezier_spline::bezier_curve(std::vector<Vector2f>& ctrl_pts, std::vector<float>& positions) const {
+    bezier_spline bezier_spline::bezier_curve(std::vector<Vector2f>& ctrl_pts, std::vector<float>& positions) {
         const int degree = ctrl_pts.size() - 1;
 
         ctrl_pts = transform_ctrl_pts(ctrl_pts);
@@ -51,6 +51,8 @@ namespace turtle::sc {
         FFT<float> fft;
 
         Matrix<std::complex<float>, Dynamic, 2> U;
+        U.setZero(ctrl_pts.size(), 2);
+
         for (std::size_t i = 0; i <= degree; ++i) {
             U(i, 0) = ctrl_pts[i].x();
             U(i, 1) = ctrl_pts[i].y();
@@ -66,6 +68,8 @@ namespace turtle::sc {
         Q.col(1) = tmp_fft;
 
         Matrix<float, Dynamic, 2> B;
+        B.setZero(positions.size(), 2);
+
         for (int i = 0; i < positions.size(); ++i) {
             float s = positions[i];
             Vector2cf sum;
@@ -83,7 +87,7 @@ namespace turtle::sc {
         return bezier_spline(tmp, B);
     }
 
-    bezier_spline bezier_spline::bezier_curve(std::vector<Vector2f>& ctrl_pts, const float precision) const {
+    bezier_spline bezier_spline::bezier_curve(std::vector<Vector2f>& ctrl_pts, const float precision) {
         dbg_assert(precision < 1 && precision > 0, "spline percision must be in (0, 1)");
 
         const int n = static_cast<int>(std::round(1.0f / precision));
