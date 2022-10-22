@@ -17,11 +17,13 @@ namespace turtle::sc {
 
     using namespace std::complex_literals;
 
-    void dbg_assert(bool cnd, const char* msg) {
+    inline void dbg_assert(bool cnd, const char* msg) {
+        #ifdef DEBUG
         if (!cnd) {
             std::cerr << "assertion failed: " << msg << std::endl;
             std::exit(1);
         }
+        #endif
     }
 
     class bezier_spline {
