@@ -35,10 +35,14 @@ target_link_libraries(sea_current INTERFACE
     Eigen3::Eigen
 )
 
-# tests
-add_executable(test examples/test.cpp)
-target_link_libraries(test PRIVATE sea_current)
-set_target_properties(test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+# examples
+if (BUILD_EXAMPLES)
+  add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/third-party/matplotlib-cpp")
+
+  add_executable(test examples/test.cpp)
+  target_link_libraries(test PRIVATE sea_current matplotlib_cpp)
+  set_target_properties(test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+endif ()
 
 install(FILES
   "${PROJECT_SOURCE_DIR}/sea_current.hpp"
