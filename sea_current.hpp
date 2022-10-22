@@ -96,6 +96,7 @@ namespace turtle::sc {
             U(i, 0) = ctrl_pts[i].x();
             U(i, 1) = ctrl_pts[i].y();
         }
+
         Matrix<std::complex<float>, Dynamic, 2> Q;
         Q.setZero(ctrl_pts.size(), 2);
 

@@ -4,6 +4,9 @@
 
 #include <Eigen/Dense>
 
+#include <chrono>
+#include <iostream>
+
 using namespace Eigen;
 using namespace turtle::sc;
 
@@ -19,7 +22,11 @@ int main() {
     ctrl_pts.push_back(Vector2f(0.5, -0.5));
     ctrl_pts.push_back(Vector2f(1.0, 0.0));
 
+    auto start = std::chrono::high_resolution_clock::now();
     bezier_spline bs = bezier_spline::bezier_curve(ctrl_pts, 0.01);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    std::cout << (duration.count() / 1000.0)<< std::endl;
 
     std::vector<float> x(bs.num_pts());
     std::vector<float> y(bs.num_pts());
