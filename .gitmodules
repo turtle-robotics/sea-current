@@ -1,0 +1,3 @@
+[submodule "third-party/matplotlib-cpp"]
+	path = third-party/matplotlib-cpp
+	url = https://github.com/turtle-robotics/matplotlib-cpp
