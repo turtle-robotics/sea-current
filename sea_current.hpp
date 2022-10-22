@@ -34,21 +34,58 @@ namespace turtle::sc {
             bezier_spline(std::vector<Vector2f>& ctrl_pts, Matrix<float, Dynamic, 2>& pts);
             bezier_spline(std::vector<std::vector<Vector2f>>& ctrl_pts, Matrix<float, Dynamic, 2>& pts);
 
-            static bezier_spline bezier_curve(std::vector<Vector2f>& ctrl_pts, std::vector<float>& positions);
+            inline int num_pts() const;
+
+            float arclength() const;
+            std::vector<float> curvature() const;
+            bezier_spline resample(std::vector<float>& arclens) const;
+
+
+            static bezier_spline join_splines(std::vector<bezier_spline>& splines);
+
+            static bezier_spline bezier_curve(const std::vector<Vector2f>& og_ctrl_pts, std::vector<float>& positions);
             static bezier_spline bezier_curve(std::vector<Vector2f>& ctrl_pts, float precision);
 
-            static std::vector<Vector2f> transform_ctrl_pts(std::vector<Vector2f>& ctrl_pts);
             static std::vector<std::complex<float>> omega_table(int degree);
     };
 
     bezier_spline::bezier_spline(std::vector<std::vector<Vector2f>>& ctrl_pts, Matrix<float, Dynamic, 2>& pts) : ctrl_pts(ctrl_pts), pts(pts) {}
 
-    bezier_spline bezier_spline::bezier_curve(std::vector<Vector2f>& ctrl_pts, std::vector<float>& positions) {
-        const int degree = ctrl_pts.size() - 1;
+    inline int bezier_spline::num_pts() const {
+        return pts.rows();
+    }
 
-        ctrl_pts = transform_ctrl_pts(ctrl_pts);
+    // it's ok that this is static as a new matrix would have to be allocated either way
+    bezier_spline bezier_spline::join_splines(std::vector<bezier_spline>& splines) {
+        std::vector<std::vector<Vector2f>> ctrl_pts;
 
-        std::vector<std::complex<float>> omegas = omega_table(degree);
+        int num_pts = 0;
+        for (bezier_spline spline : splines) {
+            num_pts += spline.num_pts();
+            for (std::vector<Vector2f> cpv : spline.ctrl_pts) {
+                ctrl_pts.push_back(cpv);
+            }
+        }
+
+        Matrix<float, Dynamic, 2> joined_pts;
+        joined_pts.setZero(num_pts, 2);
+
+        int n = 0;
+        for (bezier_spline spline : splines) {
+            joined_pts.block(n, 0, spline.num_pts(), 2);
+            n += spline.num_pts();
+        }
+
+        return bezier_spline(ctrl_pts, joined_pts);
+    }
+
+    bezier_spline bezier_spline::bezier_curve(const std::vector<Vector2f>& og_ctrl_pts, std::vector<float>& positions) {
+        const int degree = og_ctrl_pts.size() - 1;
+
+        //const std::vector<Vector2f> ctrl_pts = bezier_spline::transform_ctrl_pts(og_ctrl_pts);
+        const std::vector<Vector2f> ctrl_pts = og_ctrl_pts;
+
+        const std::vector<std::complex<float>> omegas = bezier_spline::omega_table(degree);
 
         FFT<float> fft;
 
@@ -74,18 +111,15 @@ namespace turtle::sc {
 
         for (int i = 0; i < positions.size(); ++i) {
             float s = positions[i];
-            Vector2cf sum;
             for (int k = 0; k <= degree; ++k) {
                 std::complex<float> tmp = std::pow((1.0f+0if) + s*(omegas[k] - (1.0f+0if)), degree);
-                sum.x() += Q(k, 0) * tmp;
-                sum.y() += Q(k, 1) * tmp;
+                B(i, 0) += (Q(k, 0) * tmp).real();
+                B(i, 1) += (Q(k, 1) * tmp).real();
             }
-            B(i, 0) = sum.x().real();
-            B(i, 1) = sum.y().real();
         }
 
         std::vector<std::vector<Vector2f>> tmp(1);
-        tmp[0] = ctrl_pts;
+        tmp[0] = og_ctrl_pts;
         return bezier_spline(tmp, B);
     }
 
@@ -105,21 +139,13 @@ namespace turtle::sc {
         return bezier_curve(ctrl_pts, positions);
     }
 
-    std::vector<Vector2f> bezier_spline::transform_ctrl_pts(std::vector<Vector2f>& ctrl_pts) {
-        std::vector<Vector2f> pts_out(ctrl_pts.size());
-        for (std::size_t i = 0; i < ctrl_pts.size(); ++i) {
-            pts_out[i] = Vector2f(ctrl_pts[i].x() + ctrl_pts[i].y(), ctrl_pts[i].x() - ctrl_pts[i].y());
-        }
-        return pts_out;
-    }
-
     std::vector<std::complex<float>> bezier_spline::omega_table(const int degree) {
         using std::complex;
 
         std::vector<std::complex<float>> omegas(degree+1);
         omegas[0] = 1.0f+0if;
         for (std::size_t i = 1; i <= degree; ++i) {
-            omegas[i] = pow(exp((std::complex<float>(std::numbers::pi) * -2if) / std::complex<float>(degree+1)), i);
+            omegas[i] = pow(exp((complex<float>(std::numbers::pi) * -2if) / complex<float>(degree+1)), i);
         }
 
         return omegas;
