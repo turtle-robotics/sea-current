@@ -23,27 +23,49 @@ int main() {
     ctrl_pts.push_back(Vector2f(1.0, 0.0));
 
     auto start = std::chrono::high_resolution_clock::now();
-    bezier_spline bs = bezier_spline::bezier_curve(ctrl_pts, 0.01);
+    bezier_spline bs = bezier_spline::bezier_curve(ctrl_pts, 0.0001);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     std::cout << (duration.count() / 1000.0)<< std::endl;
 
-    std::vector<float> x(bs.num_pts());
-    std::vector<float> y(bs.num_pts());
-    for (int i = 0; i < bs.num_pts(); ++i) {
+    std::vector<float> x(bs.n_pts());
+    std::vector<float> y(bs.n_pts());
+    for (int i = 0; i < bs.n_pts(); ++i) {
         x[i] = bs.pts(i, 0);
         y[i] = bs.pts(i, 1);
     }
 
-    std::vector<float> x2(bs.num_pts());
-    std::vector<float> y2(bs.num_pts());
+    std::vector<float> x2(bs.ctrl_pts[0].size());
+    std::vector<float> y2(bs.ctrl_pts[0].size());
     for (int i = 0; i < bs.ctrl_pts[0].size(); ++i) {
         x2[i] = bs.ctrl_pts[0][i].x();
         y2[i] = bs.ctrl_pts[0][i].y();
     }
 
+    bezier_spline deriv = bs.hodograph();
 
-    plt::plot(x, y, "");
-    plt::plot(x2, y2, "ro");
-    plt::show();
+    // float n_arclen = 0;
+    // for (int i = 0; i < deriv.n_pts()-1; ++i) {
+    //     Vector2f a(deriv.pts(i, 0), deriv.pts(i, 1));
+    //     Vector2f b(deriv.pts(i+1, 0), deriv.pts(i+1, 1));
+    //     n_arclen += std::sqrt(std::pow(a(1)-b(1), 2) + std::pow(a(0)-b(0), 2));
+    // }
+    // std::cout << n_arclen << std::endl;
+
+    start = std::chrono::high_resolution_clock::now();
+    float arclen = std::get<0>(bs.arclength());
+    end = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    std::cout << arclen << std::endl;
+    std::cout << (duration.count() / 1000.0)<< std::endl;
+
+
+    std::vector<float> arcs = std::get<1>(bs.arclength())[0];
+    for (float arc : arcs) {
+        // std::cout << arc << std::endl;
+    }
+
+    // plt::plot(x, y, "");
+    // plt::plot(x2, y2, "ro");
+    // plt::show();
 }
