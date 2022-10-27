@@ -304,4 +304,34 @@ namespace turtle::sc {
 
         return omegas;
     }
+
+    using cheb_poly = VectorXf;
+
+    cheb_poly chebfit(const VectorXf& x, const VectorXf& y, const int degree) {
+        const int n = degree;
+        const int m = x.rows();
+        const float xmax = x.maxCoeff();
+        const float xmin = x.minCoeff();
+
+        dbg_assert(std::abs(xmax - xmin) > 0.00001, "Error: vector x should not have all equal values");
+
+        const VectorXf x_norm = ((2*x).array() - (xmax + xmin)) / (xmax - xmin);
+
+        MatrixXf T = MatrixXf::Zero(m, n);
+        T.col(0) = VectorXf::Ones(m);
+        T.col(1) = x_norm;
+
+        for (int j = 2; j < n; ++j) {
+            T.col(j) = (2*x_norm).array() * T.col(j-1).array() - T.col(j-2).array();
+        }
+
+        ColPivHouseholderQR<MatrixXf> T_Qr = T.colPivHouseholderQr();
+        dbg_assert(T_Qr.rank() == 2, "");
+
+        return T_Qr.solve(y);
+    }
+
+    VectorXf chebeval(const VectorXf& x, const cheb_poly& b) {
+
+    }
 }
