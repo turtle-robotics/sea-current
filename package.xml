@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package format='2'>
+ <name>sea-current</name>
+ <version>0.0.1</version>
+ <description>Path Planning Library</description>
+
+ <maintainer email="cflew@tutanota.com">Christian Flewelling</maintainer>
+ <license>Mozilla Public License Version 2.0</license>
+
+ <buildtool_depend>catkin</buildtool_depend>
+</package>
