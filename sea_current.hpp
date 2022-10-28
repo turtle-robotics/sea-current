@@ -344,7 +344,7 @@ namespace turtle::sc {
 
         VectorXf y = VectorXf::Zero(m);
 
-        MatrixXf T = MatrixXf::Zero(m, n); // different T :)
+        MatrixXf T = MatrixXf::Zero(m, n);
         T.col(0) = VectorXf::Ones(m);
         y += b(0) * T.col(0);
 
