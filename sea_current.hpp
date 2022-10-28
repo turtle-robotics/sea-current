@@ -319,7 +319,7 @@ namespace turtle::sc {
 
         MatrixXf T = MatrixXf::Zero(m, n);
         T.col(0) = VectorXf::Ones(m);
-        T.col(1) = x_norm;
+        if (n >= 1) T.col(1) = x_norm;
 
         for (int j = 2; j < n; ++j) {
             T.col(j) = (2*x_norm).array() * T.col(j-1).array() - T.col(j-2).array();
@@ -331,7 +331,33 @@ namespace turtle::sc {
         return T_Qr.solve(y);
     }
 
-    VectorXf chebeval(const VectorXf& x, const cheb_poly& b) {
+    VectorXf chebeval(const VectorXf& x, const cheb_poly& b, const int degree) {
+        const int n = degree;
+        const int m = x.rows();
+        const float xmax = x.maxCoeff();
+        const float xmin = x.minCoeff();
 
+        dbg_assert(std::abs(xmax - xmin) > 0.00001, "Error: vector x should not have all equal values");
+        dbg_assert(degree >= 1, "degree must be >= 1");
+
+        const VectorXf x_norm = ((2*x).array() - (xmax + xmin)) / (xmax - xmin);
+
+        VectorXf y = VectorXf::Zero(m);
+
+        MatrixXf T = MatrixXf::Zero(m, n); // different T :)
+        T.col(0) = VectorXf::Ones(m);
+        y += b(0) * T.col(0);
+
+        if (n >= 1) {
+            T.col(1) = x_norm;
+            y += b(1) * T.col(1);
+        }
+
+        for (int j = 0; j < n; ++j) {
+            T.col(j) = (2*x_norm).array() * T.col(j-1).array() - T.col(j-2).array();
+            y += b(j) * T.col(j);
+        }
+
+        return y;
     }
 }
