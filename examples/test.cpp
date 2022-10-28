@@ -18,6 +18,7 @@ int main() {
     std::vector<Vector2f> ctrl_pts;
 
     ctrl_pts.push_back(Vector2f(-1.0, 0.0));
+    // ctrl_pts.push_back(Vector2f(-0.6, 0.5));
     ctrl_pts.push_back(Vector2f(-0.5, 0.5));
     ctrl_pts.push_back(Vector2f(0.5, -0.5));
     ctrl_pts.push_back(Vector2f(1.0, 0.0));
@@ -56,7 +57,7 @@ int main() {
     float arclen = std::get<0>(bs.arclength());
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    std::cout << arclen << std::endl;
+    // std::cout << arclen << std::endl;
     std::cout << (duration.count() / 1000.0)<< std::endl;
 
 
@@ -65,7 +66,20 @@ int main() {
         // std::cout << arc << std::endl;
     }
 
-    // plt::plot(x, y, "");
-    // plt::plot(x2, y2, "ro");
-    // plt::show();
+    constexpr int degree = 10;
+    start = std::chrono::high_resolution_clock::now();
+
+    cheb_poly b = chebfit(bs.pts.col(0), bs.pts.col(1), degree);
+    VectorXf y_hat = chebeval(bs.pts.col(0), b, degree);
+
+    end = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    std::cout << (duration.count() / 1000.0)<< std::endl;
+
+
+    std::vector<float> y_hat_p(y_hat.data(), y_hat.data() + y_hat.rows() * y_hat.cols());
+    plt::plot(x, y, "");
+    plt::plot(x2, y2, "ro");
+    plt::plot(x, y_hat_p, "");
+    plt::show();
 }

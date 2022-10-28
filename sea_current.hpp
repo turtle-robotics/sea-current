@@ -327,7 +327,7 @@ namespace turtle::sc {
         }
 
         ColPivHouseholderQR<MatrixXf> T_Qr = T.colPivHouseholderQr();
-        dbg_assert(T_Qr.rank() == 2, "");
+        dbg_assert(T_Qr.rank() == degree, "");
 
         return T_Qr.solve(y);
     }
