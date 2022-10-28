@@ -314,6 +314,7 @@ namespace turtle::sc {
         const float xmin = x.minCoeff();
 
         dbg_assert(std::abs(xmax - xmin) > 0.00001, "Error: vector x should not have all equal values");
+        dbg_assert(degree >= 1, "degree must be >= 1");
 
         const VectorXf x_norm = ((2*x).array() - (xmax + xmin)) / (xmax - xmin);
 
@@ -353,7 +354,7 @@ namespace turtle::sc {
             y += b(1) * T.col(1);
         }
 
-        for (int j = 0; j < n; ++j) {
+        for (int j = 2; j < n; ++j) {
             T.col(j) = (2*x_norm).array() * T.col(j-1).array() - T.col(j-2).array();
             y += b(j) * T.col(j);
         }
