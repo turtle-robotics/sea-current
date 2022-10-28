@@ -35,6 +35,8 @@ target_link_libraries(sea_current INTERFACE
     Eigen3::Eigen
 )
 
+option(BUILD_EXAMPLES "Build Examples" OFF)
+
 # examples
 if (BUILD_EXAMPLES)
   add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/third-party/matplotlib-cpp")
