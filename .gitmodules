@@ -1,3 +1,6 @@
 [submodule "third-party/matplotlib-cpp"]
 	path = third-party/matplotlib-cpp
 	url = https://github.com/turtle-robotics/matplotlib-cpp
+[submodule "third-party/toppra"]
+	path = third-party/toppra
+	url = https://github.com/hungpham2511/toppra
