@@ -12,48 +12,62 @@
 #include <unsupported/Eigen/FFT>
 
 
+#ifdef DEBUG
+inline void dbg_assert(bool cnd, const char* msg) {
+    if (!cnd) {
+        std::cerr << "assertion failed: " << msg << std::endl;
+        std::exit(1);
+    }
+}
+#else
+#define dbg_assert(a, b)
+#endif
+
 namespace turtle::sc {
 
     using namespace Eigen;
 
     using namespace std::complex_literals;
 
-    inline void dbg_assert(bool cnd, const char* msg) {
-        #ifdef DEBUG
-        if (!cnd) {
-            std::cerr << "assertion failed: " << msg << std::endl;
-            std::exit(1);
-        }
-        #endif
-    }
+    using cheb_poly = VectorXf;
+    cheb_poly chebfit(const VectorXf& x, const VectorXf& y, const int degree);
+    VectorXf chebeval(const VectorXf& x, const cheb_poly& b, const int degree);
+
+    struct arclength_data {
+        float arclength;
+        std::vector<VectorXf> segments;
+    };
 
     class bezier_spline {
         public:
             std::vector<std::vector<Vector2f>> ctrl_pts;
             Matrix<float, Dynamic, 2> pts;
-            std::vector<std::vector<float>> positions; // for curvature/hodograph
+            std::vector<VectorXf> positions; // for curvature/hodograph
 
             bezier_spline() = default;
-            bezier_spline(const std::vector<std::vector<Vector2f>>& ctrl_pts, const Matrix<float, Dynamic, 2>& pts, const std::vector<std::vector<float>>& positions);
+            bezier_spline(const std::vector<std::vector<Vector2f>>& ctrl_pts, const Matrix<float, Dynamic, 2>& pts, const std::vector<VectorXf>& positions);
 
             static bezier_spline join_splines(std::vector<bezier_spline>& splines);
 
-            static bezier_spline bezier_curve(const std::vector<Vector2f>& og_ctrl_pts, const std::vector<float>& positions);
+            static bezier_spline bezier_curve(const std::vector<Vector2f>& ctrl_pts, const std::vector<float>& positions);
+            static bezier_spline bezier_curve(const std::vector<Vector2f>& ctrl_pts, const VectorXf& positions);
             static bezier_spline bezier_curve(std::vector<Vector2f>& ctrl_pts, float precision);
 
             inline int n_pts() const;
             inline int n_segments() const;
             inline int degree() const;
 
-            std::tuple<float, std::vector<std::vector<float>>> arclength(const float precision) const;
+            // std::tuple<float, std::vector<std::vector<float>>> arclength(const float precision) const;
+            arclength_data arclength(const float precision) const;
             std::vector<float> curvature() const;
             bezier_spline hodograph() const;
-            bezier_spline resample(std::vector<float>& arclens) const;
+            bezier_spline resample(const VectorXf& profile_pos, arclength_data ad) const;
 
+            // helper function for bezier_curve
             static std::vector<std::complex<float>> omega_table(int degree);
     };
 
-    bezier_spline::bezier_spline(const std::vector<std::vector<Vector2f>>& ctrl_pts, const Matrix<float, Dynamic, 2>& pts, const std::vector<std::vector<float>>& positions) : ctrl_pts(ctrl_pts), pts(pts), positions(positions) {}
+    bezier_spline::bezier_spline(const std::vector<std::vector<Vector2f>>& ctrl_pts, const Matrix<float, Dynamic, 2>& pts, const std::vector<VectorXf>& positions) : ctrl_pts(ctrl_pts), pts(pts), positions(positions) {}
 
     inline int bezier_spline::n_pts() const {
         return pts.rows();
