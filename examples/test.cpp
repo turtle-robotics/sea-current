@@ -13,7 +13,7 @@ using namespace turtle::sc;
 namespace plt = matplotlibcpp;
 
 int main() {
-    turtle::sc::dbg_assert(true, "");
+    dbg_assert(true, "");
 
     std::vector<Vector2f> ctrl_pts;
 
@@ -54,14 +54,14 @@ int main() {
     // std::cout << n_arclen << std::endl;
 
     start = std::chrono::high_resolution_clock::now();
-    float arclen = std::get<0>(bs.arclength());
+    float arclen = bs.arclength(0.01).arclength;
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     // std::cout << arclen << std::endl;
     std::cout << (duration.count() / 1000.0)<< std::endl;
 
 
-    std::vector<float> arcs = std::get<1>(bs.arclength())[0];
+    VectorXf arcs = bs.arclength().segments[0];
     for (float arc : arcs) {
         // std::cout << arc << std::endl;
     }
