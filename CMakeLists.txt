@@ -30,9 +30,14 @@ target_include_directories(sea_current
     $<INSTALL_INTERFACE:include>
 )
 
+set(BUILD_TESTS OFF CACHE BOOL "Build Gtests" FORCE)
+set(PYTHON_BINDINGS OFF CACHE BOOL "PYTHON_BINDINGS" FORCE)
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/third-party/toppra/cpp")
+
 find_package(Eigen3 3.4)
 target_link_libraries(sea_current INTERFACE
     Eigen3::Eigen
+    toppra
 )
 
 option(BUILD_EXAMPLES "Build Examples" OFF)
