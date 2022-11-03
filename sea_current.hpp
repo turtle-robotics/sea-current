@@ -29,14 +29,22 @@ namespace turtle::sc {
 
     using namespace std::complex_literals;
 
-    using cheb_poly = VectorXf;
-    cheb_poly chebfit(const VectorXf& x, const VectorXf& y, const int degree);
-    VectorXf chebeval(const VectorXf& x, const cheb_poly& b, const int degree);
 
     struct arclength_data {
         float arclength;
         std::vector<VectorXf> segments;
+        std::vector<VectorXf> positions;
     };
+
+    struct chebpoly {
+        VectorXf coeffs;
+        float xmin;
+        float xmax;
+        chebpoly(VectorXf coeffs, const float xmin, const float xmax) : coeffs(coeffs), xmin(xmin), xmax(xmax) {}
+    };
+
+    chebpoly chebfit(const VectorXf& x, const VectorXf& y, const int degree);
+    VectorXf chebeval(const VectorXf& x, const chebpoly& b, const int degree);
 
     class bezier_spline {
         public:
@@ -57,14 +65,21 @@ namespace turtle::sc {
             inline int n_segments() const;
             inline int degree() const;
 
-            // std::tuple<float, std::vector<std::vector<float>>> arclength(const float precision) const;
             arclength_data arclength(const float precision) const;
             std::vector<float> curvature() const;
             bezier_spline hodograph() const;
-            bezier_spline resample(const VectorXf& profile_pos, arclength_data ad) const;
+            bezier_spline resample(VectorXf& profile_pos, arclength_data ad, bool nudge_positions) const;
 
             // helper function for bezier_curve
             static std::vector<std::complex<float>> omega_table(int degree);
+
+        private:
+            template <typename T, typename Y>
+            static inline T coerce(T& num, Y low, Y high) {
+                if (num < low) return low;
+                else if (num > high) return high;
+                return num;
+            }
     };
 
     bezier_spline::bezier_spline(const std::vector<std::vector<Vector2f>>& ctrl_pts, const Matrix<float, Dynamic, 2>& pts, const std::vector<VectorXf>& positions) : ctrl_pts(ctrl_pts), pts(pts), positions(positions) {}
@@ -247,7 +262,8 @@ namespace turtle::sc {
 
         float total_arclen = 0;
         std::vector<VectorXf> arclens(n_segments());
-        for (int b = 0; b < n_segments(); ++b) {
+        std::vector<VectorXf> arclen_positions(n_segments());
+        for (int s = 0; s < n_segments(); ++s) {
             dbg_assert(precision < 1 && precision > 0, "spline percision must be in (0, 1)");
 
             const int n = static_cast<int>(std::round(1.0f / precision));
@@ -271,20 +287,21 @@ namespace turtle::sc {
                 }
             }
 
-            bezier_spline deriv = (bezier_spline({ctrl_pts[b]}, Matrix<float, Dynamic, 2>(), {deriv_pos})).hodograph();
+            bezier_spline deriv = (bezier_spline({ctrl_pts[s]}, Matrix<float, Dynamic, 2>(), {deriv_pos})).hodograph();
 
-            // std::vector<float> arclen_seg(pos.size()-1);
-            VectorXf arclen_seg = VectorXf::Zero(pos.size()-1);
+            VectorXf arclen_seg = VectorXf::Zero(pos.size());
+            VectorXf arclen_seg_pos = VectorXf::Zero(pos.size());
             for (int k = 0; k < pos.size()-1; ++k) {
                 const float b = pos[k+1];
                 const float a = pos[k];
 
                 for (int i = 0; i < weights.size(); ++i) {
                     const int ind = (k*weights.size())+i;
-                    arclen_seg[k] += weights[i] * std::sqrt((deriv.pts(ind, 0) * deriv.pts(ind, 0)) + (deriv.pts(ind, 1) * deriv.pts(ind, 1)));
+                    arclen_seg(k+1) += weights[i] * std::sqrt((deriv.pts(ind, 0) * deriv.pts(ind, 0)) + (deriv.pts(ind, 1) * deriv.pts(ind, 1)));
                 }
-                arclen_seg[k] *= ((b-a)/2.0f);
-                total_arclen += arclen_seg[k];
+                arclen_seg[k+1] *= ((b-a)/2.0f);
+                arclen_seg_pos[k+1] = b;
+                total_arclen += arclen_seg[k+1];
             }
 
             float sum = 0;
@@ -292,17 +309,30 @@ namespace turtle::sc {
                 sum += arc;
                 arc = sum;
             }
-            arclens[b] = arclen_seg;
+            arclens[s] = arclen_seg;
+            arclen_positions[s] = arclen_seg_pos;
         }
         arclength_data ad;
         ad.arclength = total_arclen;
         ad.segments = arclens;
+        ad.positions = arclen_positions;
 
         return ad;
-        // return std::tuple(total_arclen, arclens);
     }
 
-    bezier_spline bezier_spline::resample(const VectorXf& profile_pos, arclength_data ad) const {
+    bezier_spline bezier_spline::resample(VectorXf& profile_pos, arclength_data ad, bool nudge_positions=false) const {
+
+        // This method of nudging only works well for isolated cases of weird values
+        if (nudge_positions) {
+            profile_pos(0) = 0;
+            profile_pos(profile_pos.rows()-1) = ad.arclength;
+            for (int i = 1; i < profile_pos.rows()-1; ++i) {
+                if (profile_pos(i) < profile_pos(i-1) || profile_pos(i) > profile_pos(i+1)) {
+                    profile_pos(i) = (profile_pos(i-1) + profile_pos(i+1)) / 2;
+                }
+            }
+        }
+
         dbg_assert(profile_pos.rows() > 0, "The vector of positions to be sampled must not be empty");
         dbg_assert(profile_pos.maxCoeff() <= ad.arclength, "The profile can not go beyond the arclength of the spline");
         dbg_assert(profile_pos.minCoeff() >= 0, "The profile can not go beyond the arclength of the spline");
@@ -312,25 +342,27 @@ namespace turtle::sc {
         int j = 0;
         for (int i = 0; i < positions.size(); ++i) {
             const VectorXf seg = ad.segments[i];
-            const float last = seg[seg.size()-1];
+            const float last = seg(seg.rows()-1);
             float offset = 0;
             int start = j;
-            for (; j < profile_pos.rows() && (profile_pos[j] - offset <= last); ++j) {} // cursed
-            offset = profile_pos[j];
+            for (; j < profile_pos.rows() && (profile_pos(j) - offset <= last); ++j) {} // cursed
+            j -= 1;
+            offset = profile_pos(j);
 
-            VectorXf block = profile_pos.block(start, 0, (j-start), 1).array() - profile_pos(start);
+            VectorXf block = profile_pos.block(start, 0, ((j+1)-start), 1).array() - profile_pos(start);
 
-            const int degree = seg.rows();
+            const int degree = std::max(seg.rows()/2, 2L);
+
 
             // polynomial from segment arclength to [0,1]
-            cheb_poly poly = chebfit(ad.segments[i], positions[i], degree);
+            chebpoly poly = chebfit(seg, ad.positions[i], degree);
             VectorXf positions_fixed = chebeval(block, poly, degree);
 
             curves[i] = bezier_curve(ctrl_pts[i], positions_fixed);
         }
 
         bezier_spline fixed_spline = join_splines(curves);
-        dbg_assert(fixed_spline.n_pts() == profile_pos.rows(), "");
+        dbg_assert(fixed_spline.n_pts() == profile_pos.rows(), "fixed_spline.n_pts() == profile_pos.rows()");
         return fixed_spline;
     }
 
@@ -366,8 +398,9 @@ namespace turtle::sc {
     }
 
 
-    cheb_poly chebfit(const VectorXf& x, const VectorXf& y, const int degree) {
+    chebpoly chebfit(const VectorXf& x, const VectorXf& y, const int degree) {
         dbg_assert(degree >= 1, "degree must be a positive integer");
+        dbg_assert(x.rows() == y.rows(), "x and y must have the same number of rows");
 
         const int n = degree;
         const int m = x.rows();
@@ -391,18 +424,18 @@ namespace turtle::sc {
         // dbg_assert(T_Qr.rank() == degree, "");
 
         HouseholderQR<MatrixXf> T_Qr = T.householderQr();
-        dbg_assert(T.colPivHouseholderQr().rank() == degree, "");
+        dbg_assert(T.colPivHouseholderQr().rank() == degree, "T.colPivHouseholderQr().rank() == degree");
 
-        return T_Qr.solve(y);
+        return chebpoly(T_Qr.solve(y), xmin, xmax);
     }
 
-    VectorXf chebeval(const VectorXf& x, const cheb_poly& b, const int degree) {
+    VectorXf chebeval(const VectorXf& x, const chebpoly& b, const int degree) {
         dbg_assert(degree >= 1, "degree must be a positive integer");
 
         const int n = degree;
         const int m = x.rows();
-        const float xmax = x.maxCoeff();
-        const float xmin = x.minCoeff();
+        const float xmax = b.xmax;
+        const float xmin = b.xmin;
 
         dbg_assert(std::abs(xmax - xmin) > 0.00001, "Error: vector x should not have all equal values");
         dbg_assert(degree >= 1, "degree must be >= 1");
@@ -413,16 +446,16 @@ namespace turtle::sc {
 
         MatrixXf T = MatrixXf::Zero(m, n);
         T.col(0) = VectorXf::Ones(m);
-        y += b(0) * T.col(0);
+        y += b.coeffs(0) * T.col(0);
 
         if (n >= 1) {
             T.col(1) = x_norm;
-            y += b(1) * T.col(1);
+            y += b.coeffs(1) * T.col(1);
         }
 
         for (int j = 2; j < n; ++j) {
             T.col(j) = (2*x_norm).array() * T.col(j-1).array() - T.col(j-2).array();
-            y += b(j) * T.col(j);
+            y += b.coeffs(j) * T.col(j);
         }
 
         return y;

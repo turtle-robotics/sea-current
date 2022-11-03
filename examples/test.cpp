@@ -89,7 +89,7 @@ int main() {
     float arclen = bs.arclength(0.01).arclength;
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    // std::cout << arclen << std::endl;
+    std::cout << arclen << std::endl;
     std::cout << (duration.count() / 1000.0)<< std::endl;
 
 
@@ -101,7 +101,7 @@ int main() {
     constexpr int degree = 10;
     start = std::chrono::high_resolution_clock::now();
 
-    cheb_poly b = chebfit(bs.pts.col(0), bs.pts.col(1), degree);
+    chebpoly b = chebfit(bs.pts.col(0), bs.pts.col(1), degree);
     VectorXf y_hat = chebeval(bs.pts.col(0), b, degree);
 
     end = std::chrono::high_resolution_clock::now();
