@@ -110,8 +110,7 @@ namespace turtle::sc {
             }
         }
 
-        Matrix<float, Dynamic, 2> joined_pts;
-        joined_pts.setZero(n_pts, 2);
+        Matrix<float, Dynamic, 2> joined_pts = Matrix<float, Dynamic, 2>::Zero(n_pts, 2);
 
         int n = 0;
         for (bezier_spline spline : splines) {
@@ -138,16 +137,14 @@ namespace turtle::sc {
 
         FFT<float> fft;
 
-        Matrix<std::complex<float>, Dynamic, 2> U;
-        U.setZero(ctrl_pts.size(), 2);
+        Matrix<std::complex<float>, Dynamic, 2> U = Matrix<float, Dynamic, 2>::Zero(ctrl_pts.size(), 2);
 
         for (std::size_t i = 0; i <= degree; ++i) {
             U(i, 0) = ctrl_pts[i].x();
             U(i, 1) = ctrl_pts[i].y();
         }
 
-        Matrix<std::complex<float>, Dynamic, 2> Q;
-        Q.setZero(ctrl_pts.size(), 2);
+        Matrix<std::complex<float>, Dynamic, 2> Q = Matrix<float, Dynamic, 2>::Zero(ctrl_pts.size(), 2);
 
         Eigen::VectorXcf tmp_fft(ctrl_pts.size());
         fft.inv(tmp_fft, U.col(0));
@@ -160,7 +157,7 @@ namespace turtle::sc {
         B.setZero(positions.rows(), 2);
 
         for (int i = 0; i < positions.rows(); ++i) {
-            float s = positions(i);
+            const float s = positions(i);
             for (int k = 0; k <= degree; ++k) {
                 std::complex<float> tmp = std::pow((1.0f+0if) + s*(omegas[k] - (1.0f+0if)), degree);
                 B(i, 0) += (Q(k, 0) * tmp).real();
