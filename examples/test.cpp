@@ -111,108 +111,61 @@ int main() {
 
     std::vector<float> y_hat_p(y_hat.data(), y_hat.data() + y_hat.rows() * y_hat.cols());
 
-    // bsr = bs.resample();
 
     // plt::subplot(4,1,1);
     // plt::plot(x, y, "");
     // plt::plot(x2, y2, "ro");
     // plt::plot(x, y_hat_p, "");
 
+
+    Eigen::Vector<value_type, 1> pos_end{arclen};
+    Eigen::Vector<value_type, 1> pos_start{0};
+
+    Eigen::Vector<value_type, 1> vel_end{0};
+    Eigen::Vector<value_type, 1> vel_start{0};
+
+    Eigen::Vector<value_type, 1> acc_min{-40};
+    Eigen::Vector<value_type, 1> acc_max{40};
+
+    auto vel_lim = [](toppra::value_type time) {
+        toppra::Vector lower{1};
+        toppra::Vector upper{1};
+
+        value_type slow = 4;
+        value_type fast = 6;
+        if (time > 0.5) {
+            lower(0,0) = -slow;
+            upper(0,0) = slow;
+        } else {
+            lower(0,0) = -fast;
+            upper(0,0) = fast;
+        }
+
+        return std::make_tuple(lower, upper);
+    };
+
     start = std::chrono::high_resolution_clock::now();
-    TestVLJV test(1);
 
-    toppra::LinearConstraintPtr ljv, lja;
-    ljv = std::make_shared<TestVLJV>(test);  //[[-1, 1], [-0.5, 0.5]]
-    lja = std::make_shared<toppra::constraint::LinearJointAcceleration>(-20 * toppra::Vector::Ones(1), 20 * toppra::Vector::Ones(1));  //[[-0.05, 0.2], [-0.1, 0.3]]
-    lja->discretizationType(toppra::DiscretizationType::Interpolation);
-    toppra::LinearConstraintPtrs constraints{ljv, lja};
-
-    constexpr double arcvtest = 10;
-
-    toppra::Vector position0{1}, position1{1};
-    position0 << 0.0;
-    position1 << arclen;
-
-    toppra::Vectors positions = {position0, position1};
-
-    toppra::Vector velocity0{1}, velocity1{1};
-    velocity0 << 0.0;
-    velocity1 << 0.0;
-
-    toppra::Vectors velocities = {velocity0, velocity1};
-
-    std::vector<toppra::value_type> steps;
-    steps = std::vector<toppra::value_type>{0, 1};
-
-    toppra::PiecewisePolyPath hermite = toppra::PiecewisePolyPath::CubicHermiteSpline(positions, velocities, steps);
-
-
-    // toppra::Matrix arcwrap(1,1);
-    // arcwrap(0,0) = arcvtest;
-    // toppra::Matrices coefficients;
-    // // coefficients.push_back(toppra::Matrix::Zero(1,1));
-    // // coefficients.push_back(toppra::Matrix::Zero(1,1));
-    // coefficients.push_back(arcwrap);
-    // coefficients.push_back(toppra::Matrix::Zero(1,1));
-
-    // std::cout << coefficients.size() << std::endl;
-
-    // std::vector<toppra::value_type> breakpoints = {0, arcvtest/2, arcvtest};
-
-    // PiecewisePolyPath path(coefficients, breakpoints);
-
-    // toppra::LinearConstraintPtrs constraints{test, lja};
-    toppra::GeometricPathPtr path = std::make_shared<PiecewisePolyPath>(hermite);
-
-    toppra::algorithm::TOPPRA algo(constraints, path);
-    toppra::ReturnCode rc1 = algo.computePathParametrization(0, 0);
-
-    dbg_assert(rc1 == toppra::ReturnCode::OK, "");
-
-    toppra::ParametrizationData pd = algo.getParameterizationData();
-
-    toppra::Vector gridpoints = pd.gridpoints;  // Grid-points used for solving the discretized problem.
-    toppra::Vector vsquared = pd.parametrization;  // Output parametrization (squared path velocity)
-    toppra::parametrizer::Spline spp(path, gridpoints, vsquared);
-
-    Eigen::Matrix<toppra::value_type, 1, 2> interval2;
-    interval2 = spp.pathInterval();
-
-    const int length2 = 100;
-    toppra::Vector times2 = toppra::Vector::LinSpaced(length2, interval2(0), interval2(1));
-
-    toppra::Vectors path_pos2;
-    path_pos2 = spp.eval(times2, 0);  // TODO this function call fails
-    toppra::Vectors path_vel2;
-    path_vel2 = spp.eval(times2, 1);  // TODO this function call fails
-    toppra::Vectors path_acc2;
-    path_acc2 = spp.eval(times2, 2);  // TODO this function call fails
+    velocity_profile prof = gen_vel_prof<1>(pos_end, pos_start, vel_end, vel_start, vel_lim, acc_min, acc_max);
 
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     std::cout << (duration.count() / 1000.0)<< std::endl;
 
-    std::cout << path_pos2.size() << std::endl;
+    VectorXf pos_plot = prof.pos[0];
+    VectorXf vel_plot = prof.vel[0];
+    VectorXf acc_plot = prof.acc[0];
 
-    VectorXf pos_plot(length2);
-    VectorXf vel_plot(length2);
-    VectorXf acc_plot(length2);
-    for (int i = 0; i < length2; ++i) {
-        for (auto val : path_pos2[i]) {
-            pos_plot(i) = val;
-            // std::cout << val << std::endl;
-        }
+    // // plt::subplot(4,1,2);
+    // plt::plot(std::vector<double>(prof.time.data(), prof.time.data()+prof.time.size()), std::vector<float>(pos_plot.data(), pos_plot.data()+pos_plot.size()), "");
 
-        for (auto val : path_vel2[i]) {
-            vel_plot(i) = val;
-            // std::cout << val << std::endl;
-        }
+    // // plt::subplot(4,1,3);
+    // plt::plot(std::vector<double>(prof.time.data(), prof.time.data()+prof.time.size()), std::vector<float>(vel_plot.data(), vel_plot.data()+vel_plot.size()), "");
 
-        for (auto val : path_acc2[i]) {
-            acc_plot(i) = val;
-        }
-    }
-    // pos_plot(0) = 0;
+    // // plt::subplot(4,1,4);
+    // plt::plot(std::vector<double>(prof.time.data(), prof.time.data()+prof.time.size()), std::vector<float>(acc_plot.data(), acc_plot.data()+acc_plot.size()), "");
+
+
     arclength_data ad = bs.arclength();
     bezier_spline re = bs.resample(pos_plot, ad, true);
 
@@ -225,16 +178,6 @@ int main() {
     }
 
     plt::plot(x3, y3, "");
-
-
-    // // plt::subplot(4,1,2);
-    // plt::plot(std::vector<double>(times2.data(), times2.data()+times2.size()), std::vector<double>(pos_plot.data(), pos_plot.data()+pos_plot.size()), "");
-
-    // // plt::subplot(4,1,3);
-    // plt::plot(std::vector<double>(times2.data(), times2.data()+times2.size()), std::vector<double>(vel_plot.data(), vel_plot.data()+vel_plot.size()), "");
-
-    // // plt::subplot(4,1,4);
-    // plt::plot(std::vector<double>(times2.data(), times2.data()+times2.size()), std::vector<double>(acc_plot.data(), acc_plot.data()+acc_plot.size()), "");
 
 
     plt::show();
