@@ -36,101 +36,7 @@ namespace turtle::sc {
 
     using namespace Eigen;
 
-    using toppra::value_type;
-    using toppra::constraint::LinearJointVelocity;
-
     using namespace std::complex_literals;
-
-
-    using vel_lim_func = std::function<std::tuple<toppra::Vector, toppra::Vector>(value_type time)>;
-
-    class LinearJointVelocityVarying : public LinearJointVelocity {
-        public:
-        vel_lim_func calc_lim;
-        LinearJointVelocityVarying(int nDof, vel_lim_func calc_lim) : LinearJointVelocity (-1*toppra::Vector::Ones(1), 1*toppra::Vector::Ones(1)) {
-            this->calc_lim = calc_lim;
-            computeVelocityLimits(0);
-        }
-        protected:
-        void computeVelocityLimits(value_type time) {
-            std::tie(m_lower, m_upper) = calc_lim(time);
-        }
-    };
-
-    struct velocity_profile {
-        std::vector<VectorXf> pos;
-        std::vector<VectorXf> vel;
-        std::vector<VectorXf> acc;
-        toppra::Vector time;
-
-        velocity_profile(std::vector<VectorXf> pos, std::vector<VectorXf> vel, std::vector<VectorXf> acc, toppra::Vector time) : pos(pos), vel(vel), acc(acc), time(time) {}
-    };
-
-    template <int N> requires (N >= 1)
-    velocity_profile gen_vel_prof(Vector<value_type, N> pos_end, Vector<value_type, N> pos_start, Vector<value_type, N> vel_end, Vector<value_type, N> vel_start, vel_lim_func vel_lim, Vector<value_type, N> acc_min, Vector<value_type, N> acc_max, const int length=100) {
-        using namespace toppra;
-        using namespace toppra::constraint;
-
-        const int dof = pos_end.rows();
-
-        LinearJointVelocityVarying vel_con(dof, vel_lim);
-
-        toppra::LinearConstraintPtr ljv, lja;
-        ljv = std::make_shared<LinearJointVelocityVarying>(vel_con);
-        lja = std::make_shared<toppra::constraint::LinearJointAcceleration>(acc_min, acc_max);
-        lja->discretizationType(toppra::DiscretizationType::Interpolation);
-        toppra::LinearConstraintPtrs constraints{ljv, lja};
-
-        toppra::Vectors positions = {pos_start, pos_end};
-
-        toppra::Vectors velocities = {vel_start, vel_end};
-
-        std::vector<toppra::value_type> steps;
-        steps = std::vector<toppra::value_type>{0, 1};
-
-        toppra::PiecewisePolyPath hermite = toppra::PiecewisePolyPath::CubicHermiteSpline(positions, velocities, steps);
-
-        toppra::GeometricPathPtr path = std::make_shared<PiecewisePolyPath>(hermite);
-
-        toppra::algorithm::TOPPRA algo(constraints, path);
-        toppra::ReturnCode rc1 = algo.computePathParametrization(0, 0);
-
-        dbg_assert(rc1 == toppra::ReturnCode::OK, "");
-
-        toppra::ParametrizationData pd = algo.getParameterizationData();
-
-        toppra::Vector gridpoints = pd.gridpoints;
-        toppra::Vector vsquared = pd.parametrization;
-        toppra::parametrizer::Spline spp(path, gridpoints, vsquared);
-
-        Eigen::Matrix<toppra::value_type, 1, 2> interval = spp.pathInterval();
-
-        toppra::Vector times = toppra::Vector::LinSpaced(length, interval(0), interval(1));
-
-        toppra::Vectors path_pos = spp.eval(times, 0);
-        toppra::Vectors path_vel = spp.eval(times, 1);
-        toppra::Vectors path_acc = spp.eval(times, 2);
-
-        std::vector<VectorXf> pos(dof);
-        std::vector<VectorXf> vel(dof);
-        std::vector<VectorXf> acc(dof);
-
-        for (int j = 0; j < dof; ++j) {
-            pos[j] = VectorXf::Zero(length);
-            vel[j] = VectorXf::Zero(length);
-            acc[j] = VectorXf::Zero(length);
-        }
-
-        for (int i = 0; i < path_pos.size(); ++i) {
-            for (int j = 0; j < dof; ++j) {
-                pos[j](i) = path_pos[i](j);
-                vel[j](i) = path_vel[i](j);
-                acc[j](i) = path_acc[i](j);
-            }
-        }
-
-        return velocity_profile(pos, vel, acc, times);
-    }
 
 
     struct arclength_data {
@@ -143,6 +49,7 @@ namespace turtle::sc {
         VectorXf coeffs;
         float xmin;
         float xmax;
+
         chebpoly(VectorXf coeffs, const float xmin, const float xmax) : coeffs(coeffs), xmin(xmin), xmax(xmax) {}
     };
 
@@ -571,5 +478,98 @@ namespace turtle::sc {
         }
 
         return y;
+    }
+
+    using toppra::value_type;
+    using toppra::constraint::LinearJointVelocity;
+
+    using vel_lim_func = std::function<std::tuple<toppra::Vector, toppra::Vector>(value_type time)>;
+
+    class LinearJointVelocityVarying : public LinearJointVelocity {
+        public:
+        vel_lim_func calc_lim;
+        LinearJointVelocityVarying(int nDof, vel_lim_func calc_lim) : LinearJointVelocity (-1*toppra::Vector::Ones(1), 1*toppra::Vector::Ones(1)) {
+            this->calc_lim = calc_lim;
+            computeVelocityLimits(0);
+        }
+        protected:
+        void computeVelocityLimits(value_type time) {
+            std::tie(m_lower, m_upper) = calc_lim(time);
+        }
+    };
+
+    struct velocity_profile {
+        std::vector<VectorXf> pos;
+        std::vector<VectorXf> vel;
+        std::vector<VectorXf> acc;
+        toppra::Vector time;
+
+        velocity_profile(std::vector<VectorXf> pos, std::vector<VectorXf> vel, std::vector<VectorXf> acc, toppra::Vector time) : pos(pos), vel(vel), acc(acc), time(time) {}
+    };
+
+    template <int N> requires (N >= 1)
+    velocity_profile gen_vel_prof(Vector<value_type, N> pos_end, Vector<value_type, N> pos_start, Vector<value_type, N> vel_end, Vector<value_type, N> vel_start, vel_lim_func vel_lim, Vector<value_type, N> acc_min, Vector<value_type, N> acc_max, const int length=100) {
+        using namespace toppra;
+        using namespace toppra::constraint;
+
+        const int dof = pos_end.rows();
+
+        LinearJointVelocityVarying vel_con(dof, vel_lim);
+
+        toppra::LinearConstraintPtr ljv, lja;
+        ljv = std::make_shared<LinearJointVelocityVarying>(vel_con);
+        lja = std::make_shared<toppra::constraint::LinearJointAcceleration>(acc_min, acc_max);
+        lja->discretizationType(toppra::DiscretizationType::Interpolation);
+        toppra::LinearConstraintPtrs constraints{ljv, lja};
+
+        toppra::Vectors positions = {pos_start, pos_end};
+
+        toppra::Vectors velocities = {vel_start, vel_end};
+
+        std::vector<toppra::value_type> steps;
+        steps = std::vector<toppra::value_type>{0, 1};
+
+        toppra::PiecewisePolyPath hermite = toppra::PiecewisePolyPath::CubicHermiteSpline(positions, velocities, steps);
+
+        toppra::GeometricPathPtr path = std::make_shared<PiecewisePolyPath>(hermite);
+
+        toppra::algorithm::TOPPRA algo(constraints, path);
+        toppra::ReturnCode rc1 = algo.computePathParametrization(0, 0);
+
+        dbg_assert(rc1 == toppra::ReturnCode::OK, "");
+
+        toppra::ParametrizationData pd = algo.getParameterizationData();
+
+        toppra::Vector gridpoints = pd.gridpoints;
+        toppra::Vector vsquared = pd.parametrization;
+        toppra::parametrizer::Spline spp(path, gridpoints, vsquared);
+
+        Eigen::Matrix<toppra::value_type, 1, 2> interval = spp.pathInterval();
+
+        toppra::Vector times = toppra::Vector::LinSpaced(length, interval(0), interval(1));
+
+        toppra::Vectors path_pos = spp.eval(times, 0);
+        toppra::Vectors path_vel = spp.eval(times, 1);
+        toppra::Vectors path_acc = spp.eval(times, 2);
+
+        std::vector<VectorXf> pos(dof);
+        std::vector<VectorXf> vel(dof);
+        std::vector<VectorXf> acc(dof);
+
+        for (int j = 0; j < dof; ++j) {
+            pos[j] = VectorXf::Zero(length);
+            vel[j] = VectorXf::Zero(length);
+            acc[j] = VectorXf::Zero(length);
+        }
+
+        for (int i = 0; i < path_pos.size(); ++i) {
+            for (int j = 0; j < dof; ++j) {
+                pos[j](i) = path_pos[i](j);
+                vel[j](i) = path_vel[i](j);
+                acc[j](i) = path_acc[i](j);
+            }
+        }
+
+        return velocity_profile(pos, vel, acc, times);
     }
 }
