@@ -61,6 +61,7 @@ namespace turtle::sc {
             std::vector<std::vector<Vector2f>> ctrl_pts;
             Matrix<float, Dynamic, 2> pts;
             std::vector<VectorXf> positions; // for curvature/hodograph
+            std::vector<Matrix<std::complex<float>, Dynamic, 2>> Q_cache;
 
             bezier_spline() = default;
             bezier_spline(const std::vector<std::vector<Vector2f>>& ctrl_pts, const Matrix<float, Dynamic, 2>& pts, const std::vector<VectorXf>& positions);
@@ -111,6 +112,7 @@ namespace turtle::sc {
     bezier_spline bezier_spline::join_splines(std::vector<bezier_spline>& splines) {
         std::vector<std::vector<Vector2f>> ctrl_pts;
         std::vector<VectorXf> positions;
+        std::vector<Matrix<std::complex<float>, Dynamic, 2>> Qs;
 
         int n_pts = 0;
         for (bezier_spline spline : splines) {
@@ -118,6 +120,7 @@ namespace turtle::sc {
             for (std::size_t i = 0; i < spline.n_segments(); ++i) {
                 ctrl_pts.push_back(spline.ctrl_pts[i]);
                 positions.push_back(spline.positions[i]);
+                Qs.push_back(spline.Q_cache[i]);
             }
         }
 
@@ -129,7 +132,9 @@ namespace turtle::sc {
             n += spline.n_pts();
         }
 
-        return bezier_spline(ctrl_pts, joined_pts, positions);
+        bezier_spline bs = bezier_spline(ctrl_pts, joined_pts, positions);
+        bs.Q_cache = Qs;
+        return bs;
     }
 
     bezier_spline bezier_spline::bezier_curve(const std::vector<Vector2f>& ctrl_pts, const std::vector<float>& positions) {
@@ -187,7 +192,9 @@ namespace turtle::sc {
             }
         }
 
-        return bezier_spline({ctrl_pts}, B, {positions});
+        bezier_spline bs = bezier_spline({ctrl_pts}, B, {positions});
+        bs.Q_cache = {Q};
+        return bs;
     }
 
     bezier_spline bezier_spline::bezier_curve(std::vector<Vector2f>& ctrl_pts, const float precision) {
@@ -377,7 +384,7 @@ namespace turtle::sc {
             chebpoly poly = chebfit(seg, ad.positions[i], degree);
             VectorXf positions_fixed = chebeval(block, poly, degree);
 
-            curves[i] = bezier_curve(ctrl_pts[i], positions_fixed);
+            curves[i] = bezier_curve(ctrl_pts[i], positions_fixed, Q_cache[i]);
         }
 
         bezier_spline fixed_spline = join_splines(curves);
