@@ -175,7 +175,7 @@ namespace turtle::sc {
             bezier_spline resample(VectorXf& profile_pos, arclength_data ad, bool nudge_positions) const;
 
             // helper function for bezier_curve
-            static std::vector<std::complex<float>> omega_table(int degree);
+            static inline std::vector<std::complex<float>> omega_table(int degree);
 
         private:
             template <typename T, typename Y>
@@ -497,7 +497,7 @@ namespace turtle::sc {
         return join_splines(curves);
     }
 
-    std::vector<std::complex<float>> bezier_spline::omega_table(const int degree) {
+    inline std::vector<std::complex<float>> bezier_spline::omega_table(const int degree) {
         using std::complex;
 
         std::vector<std::complex<float>> omegas(degree+1);
