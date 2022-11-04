@@ -162,6 +162,7 @@ namespace turtle::sc {
 
             static bezier_spline bezier_curve(const std::vector<Vector2f>& ctrl_pts, const std::vector<float>& positions);
             static bezier_spline bezier_curve(const std::vector<Vector2f>& ctrl_pts, const VectorXf& positions);
+            static bezier_spline bezier_curve(const std::vector<Vector2f>& ctrl_pts, const VectorXf& positions, Matrix<std::complex<float>, Dynamic, 2> Q);
             static bezier_spline bezier_curve(std::vector<Vector2f>& ctrl_pts, float precision);
 
             inline int n_pts() const;
@@ -236,7 +237,6 @@ namespace turtle::sc {
 
         const int degree = ctrl_pts.size() - 1;
 
-        const std::vector<std::complex<float>> omegas = bezier_spline::omega_table(degree);
 
         FFT<float> fft;
 
@@ -256,8 +256,20 @@ namespace turtle::sc {
         fft.inv(tmp_fft, U.col(1));
         Q.col(1) = tmp_fft;
 
+        return bezier_curve(ctrl_pts, positions, Q);
+    }
+
+    bezier_spline bezier_spline::bezier_curve(const std::vector<Vector2f>& ctrl_pts, const VectorXf& positions, Matrix<std::complex<float>, Dynamic, 2> Q) {
+        dbg_assert(ctrl_pts.size() >= 2, "ctrl_pts must have at least 2 points");
+        dbg_assert(positions.minCoeff() >= 0, "positions must be between [0, 1]");
+        dbg_assert(positions.minCoeff() <= 1, "positions must be between [0, 1]");
+
+        const int degree = ctrl_pts.size() - 1;
+
         Matrix<float, Dynamic, 2> B;
         B.setZero(positions.rows(), 2);
+
+        const std::vector<std::complex<float>> omegas = bezier_spline::omega_table(degree);
 
         for (int i = 0; i < positions.rows(); ++i) {
             const float s = positions(i);
