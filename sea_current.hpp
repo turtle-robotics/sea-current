@@ -66,7 +66,7 @@ namespace turtle::sc {
         velocity_profile(std::vector<VectorXf> pos, std::vector<VectorXf> vel, std::vector<VectorXf> acc, toppra::Vector time) : pos(pos), vel(vel), acc(acc), time(time) {}
     };
 
-    template <int N> requires requires (int x) { x >= 100; } // there is 100% a better way to do this, but i dont know enough template magic
+    template <int N> requires (N >= 1)
     velocity_profile gen_vel_prof(Vector<value_type, N> pos_end, Vector<value_type, N> pos_start, Vector<value_type, N> vel_end, Vector<value_type, N> vel_start, vel_lim_func vel_lim, Vector<value_type, N> acc_min, Vector<value_type, N> acc_max, const int length=100) {
         using namespace toppra;
         using namespace toppra::constraint;
