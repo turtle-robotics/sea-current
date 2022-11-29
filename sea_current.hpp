@@ -8,6 +8,10 @@
 #include <algorithm>
 #include <tuple>
 #include <functional>
+#include <unordered_set>
+#include <queue>
+#include <limits>
+#include <set>
 
 #include <Eigen/Dense>
 #include <unsupported/Eigen/FFT>
@@ -586,4 +590,255 @@ namespace turtle::sc {
 
         return velocity_profile(pos, vel, acc, times);
     }
+
+
+    struct fmt_node {
+        const Vector2f pt;
+        Vector2f parent;
+        float cost;
+
+        float x() {
+            return pt(0);
+        }
+
+        float y() {
+            return pt(1);
+        }
+
+        // fmt_node(const Vector2f pt, Vector) {}
+    };
+
+    struct halton_state {
+        int f = 0;
+        int i = 0;
+        halton_state(int f, int i) : f(f), i(i) {}
+        halton_state() : f(0), i(0) {}
+    };
+
+    std::vector<float> halton(const int b, const int n, halton_state& state) {
+        std::vector<float> nums(n);
+
+        int f = 0;
+        int i = 1;
+
+        if (state.i != 0 && state.f != 0) {
+            i = state.i;
+            f = state.f;
+        }
+
+        for (int j = 0; j < n; ++j) {
+
+            int x = i - f;
+            if (x == 1) {
+                f = 1;
+                i *= b;
+            } else {
+                int y = std::floor(i / b);
+                while (x <= y) {
+                    y = std::floor(y / b);
+                }
+                f = (b + 1) * y - x;
+            }
+
+            nums[j] = static_cast<float>(f) / i;
+        }
+
+        state.f = f;
+        state.i = i;
+
+        return nums;
+    }
+
+
+    struct bounding_rect {
+        float x_max;
+        float x_min;
+        float y_max;
+        float y_min;
+
+        inline bool contains(const Vector2f& point) {
+            return point.x() <= x_max &&
+                   point.x() >= x_min &&
+                   point.y() <= y_max &&
+                   point.y() >= y_min;
+        }
+
+        inline void enclose_point(const Vector2f& pt) {
+            if (pt.x() > x_max) x_max = pt.x();
+            if (pt.x() < x_min) x_min = pt.x();
+            if (pt.y() > y_max) y_max = pt.y();
+            if (pt.y() < y_min) y_min = pt.y();
+        }
+
+        bounding_rect(const float x_max, const float x_min, const float y_max, const float y_min) : x_max(x_max), x_min(x_min), y_max(y_max), y_min(y_min) {}
+    };
+
+    inline float cross2d(Vector2f u, Vector2f v) {
+        return u.x()*v.y() - u.y()*v.x();
+    }
+
+    std::tuple<bool, Vector2f> intersects(std::tuple<Vector2f, Vector2f> l, std::tuple<Vector2f, Vector2f> k) {
+        const float a = cross2d(std::get<0>(k)-std::get<0>(l), std::get<1>(l)-std::get<0>(l));
+        const float b = cross2d(std::get<1>(l)-std::get<0>(l), std::get<1>(k)-std::get<0>(k));
+
+        if (a == 0 && b == 0) {
+            // float ax = std::get<0>(l).x();
+            // float bx = std::get<1>(l).x();
+            // float cx = std::get<0>(k).x();
+            // float dx = std::get<1>(k).x();
+
+            // using std::max;
+            // using std::min;
+
+            // return (max(ax, bx) >= min(cx, dx) && min(ax, bx) <= min(cx, dx))
+            //     || (max(cx, dx) >= min(ax, bx) && min(cx, dx) <= min(ax, bx))
+            //     || (min(ax, bx) <= max(cx, dx) && max(ax, bx) >= max(cx, dx))
+            //     || (min(cx, dx) <= max(ax, bx) && max(cx, dx) >= max(ax, bx));
+
+            // TODO: consider a different way of handling colinear segments
+            return {false, Vector2f(0, 0)};
+        } else if (b == 0 && a != 0) {
+            return {false, Vector2f(0, 0)};
+        } else if (b != 0) {
+            const float u = a / b;
+
+            const float c = cross2d(std::get<0>(k)-std::get<0>(l), std::get<1>(k)-std::get<0>(k));
+            // float d = cross2d(std::get<1>(l)-std::get<0>(l), std::get<1>(k)-std::get<0>(k));
+            const float d = b;
+
+            const float t = c / d;
+
+            if (0 <= u && u <= 1 && 0 <= t && t <= 1) {
+                return {true, t*(std::get<1>(l)-std::get<0>(l))+std::get<0>(l)};
+            }
+        }
+        return {false, Vector2f(0, 0)};
+    }
+
+    struct obstacle {
+        std::vector<std::tuple<Vector2f, Vector2f>> lines;
+        std::vector<Vector2f> vertices;
+        bounding_rect bound_rect = {0, 0, 0, 0};
+
+        bool contains(const Vector2f& point) {
+            if (!bound_rect.contains(point)) return false;
+
+            const Vector2f outside_pt(bound_rect.x_max+1, bound_rect.y_max+1);
+
+            int count = 0;
+
+            std::vector<bool> corners(vertices.size());
+            for (auto& line : lines) {
+                auto [ints, int_pt] = intersects({outside_pt, point}, line);
+                if (ints) {
+                    bool counted = false;
+
+                    for (int i = 0; i < vertices.size(); ++i) {
+                        using std::abs;
+                        if (abs(int_pt.x() - vertices[i].x()) <= 0.00001 &&
+                            abs(int_pt.y() - vertices[i].y()) <= 0.00001) {
+
+                            if (corners[i]) {
+                                counted = true;
+                                continue;
+                            }
+
+
+                            corners[i] = true;
+                            count++;
+                            counted = true;
+                            break;
+                        }
+                    }
+
+                    if (!counted) count++;
+                }
+            }
+
+
+            return count % 2 == 1;
+        }
+
+        obstacle(std::vector<Vector2f> vertices) : vertices(vertices) {
+            bound_rect = {vertices[0].x(), vertices[0].x(), vertices[0].y(), vertices[0].y()};
+
+            if (vertices.size() % 2 == 0) {
+                vertices.push_back(vertices[0]);
+            }
+
+            lines.resize(vertices.size()-1);
+
+            for (int i = 0; i < vertices.size() - 1; ++i) {
+                lines[i] = {vertices[i], vertices[i+1]};
+
+                bound_rect.enclose_point(vertices[i]);
+            }
+        }
+
+        obstacle(std::vector<Vector2f> vertices, std::vector<std::tuple<int, int>> edges) : vertices(vertices) {
+            bound_rect = {vertices[0].x(), vertices[0].x(), vertices[0].y(), vertices[0].y()};
+            lines.reserve(edges.size());
+            for (const auto& edge : edges) {
+                dbg_assert(std::get<0>(edge) < vertices.size(), "edge must reference indices within the vertex list");
+                dbg_assert(std::get<1>(edge) < vertices.size(), "edge must reference indices within the vertex list");
+
+                lines.push_back({vertices[std::get<0>(edge)], vertices[std::get<1>(edge)]});
+
+                bound_rect.enclose_point(vertices[std::get<0>(edge)]);
+                bound_rect.enclose_point(vertices[std::get<1>(edge)]);
+            }
+        }
+    };
+
+    class planning_space {
+        public:
+            std::vector<Vector2f> sample_free(const int n);
+            std::vector<obstacle> obstacles;
+
+            planning_space(const bounding_rect& br);
+
+            bounding_rect bound_rect;
+            halton_state x_state;
+            halton_state y_state;
+    };
+
+    planning_space::planning_space(const bounding_rect& br) : bound_rect(br) {}
+
+    std::vector<Vector2f> planning_space::sample_free(const int n) {
+        std::vector<Vector2f> pts;
+        pts.reserve(n);
+
+        while (n > pts.size()) {
+            std::vector<float> x_test = halton(2, n - pts.size(), x_state);
+            std::vector<float> y_test = halton(3, n - pts.size(), y_state);
+
+            for (int i = 0; i < x_test.size(); ++i) {
+                Vector2f test((bound_rect.x_max-bound_rect.x_min)*(x_test[i])+bound_rect.x_min, (bound_rect.y_max-bound_rect.y_min)*(y_test[i])+bound_rect.y_min);
+
+                bool add = true;
+                for (auto& obstacle : obstacles) {
+                    if (obstacle.contains(test)) add = false;
+                }
+                if (add) pts.push_back(test);
+            }
+        }
+
+        return pts;
+    }
+
+    void fast_marching_trees(const Vector2f x_init, const int n) {
+        // using point_set = std::vector<Vector2f>;
+
+        // point_set E;
+
+        // point_set W = sample_free(n);
+
+        // point_set V = W;
+        // V.push_back(x_init);
+
+        // std::priority_queue<Vector2f, std::vector<Vector2f>> H;
+        // H.push(x_init);
+
+    }
+
 }

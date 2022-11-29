@@ -177,8 +177,40 @@ int main() {
         // std::cout << x3[i] << " " << y3[i] << std::endl;
     }
 
-    plt::plot(x3, y3, "");
+    // plt::plot(x3, y3, "");
 
+    start = std::chrono::high_resolution_clock::now();
 
+    const bounding_rect br = {1, -1, 1, -1};
+    // const bounding_rect br = {1, 0, 1, 0};
+    planning_space space(br);
+
+    obstacle ob({Vector2f(-0.5, 0), Vector2f(1, 0), Vector2f(1, 1), Vector2f(0, 1)});
+    obstacle ob2({Vector2f(0, -0.5), Vector2f(1, 0), Vector2f(1, 1), Vector2f(0, 1)});
+    space.obstacles.push_back(ob);
+    space.obstacles.push_back(ob2);
+
+    std::vector<Vector2f> pts = space.sample_free(2560);
+
+    end = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    std::cout << (duration.count() / 1000.0)<< std::endl;
+
+    // for (auto& pt : pts) {
+    //     std::cout << "pt: " << pt.x() << " " << pt.y() << std::endl;
+    // }
+
+    std::cout << "c: " << ob.contains(Vector2f(0.5, 0.5)) << std::endl;
+
+    std::vector<float> x4(pts.size());
+    std::vector<float> y4(pts.size());
+    for (int i = 0; i < pts.size(); ++i) {
+        // std::cout << "x y: " << pts[i].x() << " " << pts[i].y() << std::endl;
+        x4[i] = pts[i].x();
+        y4[i] = pts[i].y();
+        // std::cout << x3[i] << " " << y3[i] << std::endl;
+    }
+
+    plt::plot(x4, y4, "o");
     plt::show();
 }
