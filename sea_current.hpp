@@ -515,7 +515,14 @@ namespace turtle::sc {
     };
 
     template <int N> requires (N >= 1)
-    velocity_profile gen_vel_prof(Vector<value_type, N> pos_end, Vector<value_type, N> pos_start, Vector<value_type, N> vel_end, Vector<value_type, N> vel_start, vel_lim_func vel_lim, Vector<value_type, N> acc_min, Vector<value_type, N> acc_max, const int length=100) {
+    velocity_profile gen_vel_prof(const Vector<value_type, N>& pos_end,
+                                  const Vector<value_type, N>& pos_start,
+                                  const Vector<value_type, N>& vel_end,
+                                  const Vector<value_type, N>& vel_start,
+                                  const vel_lim_func& vel_lim,
+                                  const Vector<value_type, N>& acc_min,
+                                  const Vector<value_type, N>& acc_max,
+                                  const int length=100) {
         using namespace toppra;
         using namespace toppra::constraint;
 
