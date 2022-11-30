@@ -141,7 +141,7 @@ namespace turtle::sc {
         return bs;
     }
 
-    bezier_spline bezier_spline::bezier_curve(const std::vector<Vector2f>& ctrl_pts, const std::vector<float>& positions) {
+    inline bezier_spline bezier_spline::bezier_curve(const std::vector<Vector2f>& ctrl_pts, const std::vector<float>& positions) {
         const VectorXf mapped = VectorXf::Map(&positions[0], positions.size());
         return bezier_curve(ctrl_pts, mapped);
     }
@@ -628,7 +628,7 @@ namespace turtle::sc {
 
         for (int j = 0; j < n; ++j) {
 
-            int x = i - f;
+            const int x = i - f;
             if (x == 1) {
                 f = 1;
                 i *= b;
@@ -793,10 +793,11 @@ namespace turtle::sc {
     class planning_space {
         public:
             std::vector<Vector2f> sample_free(const int n);
-            std::vector<obstacle> obstacles;
+            float cost(const Vector2f a, const Vector2f b) const;
 
             planning_space(const bounding_rect& br);
 
+            std::vector<obstacle> obstacles;
             bounding_rect bound_rect;
             halton_state x_state;
             halton_state y_state;
@@ -805,15 +806,18 @@ namespace turtle::sc {
     planning_space::planning_space(const bounding_rect& br) : bound_rect(br) {}
 
     std::vector<Vector2f> planning_space::sample_free(const int n) {
+        // technically this should be a set, but the halton sequence is guaranteed to not repeat
+        // so we can avoid element checks for a set
         std::vector<Vector2f> pts;
         pts.reserve(n);
 
         while (n > pts.size()) {
+            // TODO: consider using different bases, or expose the bases to the user
             std::vector<float> x_test = halton(2, n - pts.size(), x_state);
             std::vector<float> y_test = halton(3, n - pts.size(), y_state);
 
             for (int i = 0; i < x_test.size(); ++i) {
-                Vector2f test((bound_rect.x_max-bound_rect.x_min)*(x_test[i])+bound_rect.x_min, (bound_rect.y_max-bound_rect.y_min)*(y_test[i])+bound_rect.y_min);
+                const Vector2f test((bound_rect.x_max-bound_rect.x_min)*(x_test[i])+bound_rect.x_min, (bound_rect.y_max-bound_rect.y_min)*(y_test[i])+bound_rect.y_min);
 
                 bool add = true;
                 for (auto& obstacle : obstacles) {
@@ -824,6 +828,21 @@ namespace turtle::sc {
         }
 
         return pts;
+    }
+
+    float planning_space::cost(const Vector2f a, const Vector2f b) const {
+        const std::tuple<Vector2f, Vector2f> line = {a, b};
+        for (auto& obstacle : obstacles) {
+            for (auto& oline : obstacle.lines) {
+                if (std::get<0>(intersects(line, oline))) {
+                    return std::numeric_limits<float>::max();
+                }
+            }
+        }
+
+        using std::sqrt;
+        using std::pow;
+        return sqrt(pow(b.x()-a.x(), 2) + pow(b.y()-a.y(), 2));
     }
 
     void fast_marching_trees(const Vector2f x_init, const int n) {
