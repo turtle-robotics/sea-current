@@ -154,6 +154,7 @@ namespace turtle::sc {
         const int degree = ctrl_pts.size() - 1;
 
 
+        // TODO: figure out if we can avoid constructing a new FFT object
         FFT<float> fft;
 
         Matrix<std::complex<float>, Dynamic, 2> U = Matrix<float, Dynamic, 2>::Zero(ctrl_pts.size(), 2);
@@ -186,6 +187,9 @@ namespace turtle::sc {
         B.setZero(positions.rows(), 2);
 
         const std::vector<std::complex<float>> omegas = bezier_spline::omega_table(degree);
+
+        // TODO: apply the optimizations described in section 3 of
+        // "Efficient computation of Bezier curves from their Bernstein-Fourier representation"
 
         for (int i = 0; i < positions.rows(); ++i) {
             const float s = positions(i);
@@ -353,6 +357,7 @@ namespace turtle::sc {
     bezier_spline bezier_spline::resample(VectorXf& profile_pos, arclength_data ad, bool nudge_positions=false) const {
 
         // This method of nudging only works well for isolated cases of weird values
+        // TODO: consider a more robust way to handle small numerical errors
         if (nudge_positions) {
             profile_pos(0) = 0;
             profile_pos(profile_pos.rows()-1) = ad.arclength;
@@ -397,7 +402,7 @@ namespace turtle::sc {
     }
 
     std::vector<float> bezier_spline::curvature() const {
-
+        // TODO: implement this
 
     }
 
@@ -580,6 +585,7 @@ namespace turtle::sc {
             acc[j] = VectorXf::Zero(length);
         }
 
+        // TODO: there is probably a better way to copy this data
         for (int i = 0; i < path_pos.size(); ++i) {
             for (int j = 0; j < dof; ++j) {
                 pos[j](i) = path_pos[i](j);
