@@ -26,15 +26,25 @@
 #include <toppra/parametrizer/spline.hpp>
 
 #ifdef DEBUG
-inline void dbg_assert(bool cnd, const char* msg) {
-    if (!cnd) {
-        std::cerr << "assertion failed: " << msg << std::endl;
-        std::exit(1);
-    }
-}
+#define SC_ASSERT(cnd, msg)                                                           \
+    do {                                                                              \
+        static_assert(                                                                \
+                !std::is_pointer_v<decltype(cnd)>,                                    \
+                "Do not use SC_ASSERT with raw pointers"                              \
+                "and instead do SC_ASSERT(cnd != nullptr) "                           \
+                "to avoid implicit pointer-to-bool conversion.");                     \
+        if (bool(cnd) == false) {                                                     \
+            std::cerr << "SC_ASSERT failed: " << #cnd << std::endl;                   \
+            std::cerr << "SC_ASSERT message: " << msg << std::endl;                   \
+            std::cerr << "SC_ASSERT failed at: ";                                     \
+            std::cerr << __func__ << " " << __FILE__ << " " << __LINE__ << std::endl; \
+            std::exit(1);                                                             \
+        }                                                                             \
+    } while(0)
 #else
-#define dbg_assert(a, b)
+#define SC_ASSERT(cnd, msg)
 #endif
+
 
 namespace turtle::sc {
 
@@ -147,9 +157,9 @@ namespace turtle::sc {
     }
 
     bezier_spline bezier_spline::bezier_curve(const std::vector<Vector2f>& ctrl_pts, const VectorXf& positions) {
-        dbg_assert(ctrl_pts.size() >= 2, "ctrl_pts must have at least 2 points");
-        dbg_assert(positions.minCoeff() >= 0, "positions must be between [0, 1]");
-        dbg_assert(positions.minCoeff() <= 1, "positions must be between [0, 1]");
+        SC_ASSERT(ctrl_pts.size() >= 2, "ctrl_pts must have at least 2 points");
+        SC_ASSERT(positions.minCoeff() >= 0, "positions must be between [0, 1]");
+        SC_ASSERT(positions.minCoeff() <= 1, "positions must be between [0, 1]");
 
         const int degree = ctrl_pts.size() - 1;
 
@@ -177,9 +187,9 @@ namespace turtle::sc {
     }
 
     bezier_spline bezier_spline::bezier_curve(const std::vector<Vector2f>& ctrl_pts, const VectorXf& positions, Matrix<std::complex<float>, Dynamic, 2> Q) {
-        dbg_assert(ctrl_pts.size() >= 2, "ctrl_pts must have at least 2 points");
-        dbg_assert(positions.minCoeff() >= 0, "positions must be between [0, 1]");
-        dbg_assert(positions.minCoeff() <= 1, "positions must be between [0, 1]");
+        SC_ASSERT(ctrl_pts.size() >= 2, "ctrl_pts must have at least 2 points");
+        SC_ASSERT(positions.minCoeff() >= 0, "positions must be between [0, 1]");
+        SC_ASSERT(positions.minCoeff() <= 1, "positions must be between [0, 1]");
 
         const int degree = ctrl_pts.size() - 1;
 
@@ -206,11 +216,11 @@ namespace turtle::sc {
     }
 
     bezier_spline bezier_spline::bezier_curve(std::vector<Vector2f>& ctrl_pts, const float precision) {
-        dbg_assert(precision < 1 && precision > 0, "spline percision must be in (0, 1)");
+        SC_ASSERT(precision < 1 && precision > 0, "spline percision must be in (0, 1)");
 
         const int n = static_cast<int>(std::round(1.0f / precision));
 
-        dbg_assert(std::abs(n - (1.0f / precision)) < 0.0001,
+        SC_ASSERT(std::abs(n - (1.0f / precision)) < 0.0001,
                     "1/percision must be (close) to an integer, for arbitrary position values use the other bezier_curve method");
 
         std::vector<float> positions(n+1);
@@ -298,11 +308,11 @@ namespace turtle::sc {
         std::vector<VectorXf> arclens(n_segments());
         std::vector<VectorXf> arclen_positions(n_segments());
         for (int s = 0; s < n_segments(); ++s) {
-            dbg_assert(precision < 1 && precision > 0, "spline percision must be in (0, 1)");
+            SC_ASSERT(precision < 1 && precision > 0, "spline percision must be in (0, 1)");
 
             const int n = static_cast<int>(std::round(1.0f / precision));
 
-            dbg_assert(std::abs(n - (1.0f / precision)) < 0.0001,
+            SC_ASSERT(std::abs(n - (1.0f / precision)) < 0.0001,
                         "1/percision must be (close) to an integer, for arbitrary position values use the other bezier_curve method");
             
             std::vector<float> pos(n+1);
@@ -368,9 +378,9 @@ namespace turtle::sc {
             }
         }
 
-        dbg_assert(profile_pos.rows() > 0, "The vector of positions to be sampled must not be empty");
-        dbg_assert(profile_pos.maxCoeff() <= ad.arclength, "The profile can not go beyond the arclength of the spline");
-        dbg_assert(profile_pos.minCoeff() >= 0, "The profile can not go beyond the arclength of the spline");
+        SC_ASSERT(profile_pos.rows() > 0, "The vector of positions to be sampled must not be empty");
+        SC_ASSERT(profile_pos.maxCoeff() <= ad.arclength, "The profile can not go beyond the arclength of the spline");
+        SC_ASSERT(profile_pos.minCoeff() >= 0, "The profile can not go beyond the arclength of the spline");
 
         std::vector<bezier_spline> curves(positions.size());
 
@@ -397,7 +407,7 @@ namespace turtle::sc {
         }
 
         bezier_spline fixed_spline = join_splines(curves);
-        dbg_assert(fixed_spline.n_pts() == profile_pos.rows(), "fixed_spline.n_pts() == profile_pos.rows()");
+        SC_ASSERT(fixed_spline.n_pts() == profile_pos.rows(), "fixed_spline.n_pts() == profile_pos.rows()");
         return fixed_spline;
     }
 
@@ -434,16 +444,16 @@ namespace turtle::sc {
 
 
     chebpoly chebfit(const VectorXf& x, const VectorXf& y, const int degree) {
-        dbg_assert(degree >= 1, "degree must be a positive integer");
-        dbg_assert(x.rows() == y.rows(), "x and y must have the same number of rows");
+        SC_ASSERT(degree >= 1, "degree must be a positive integer");
+        SC_ASSERT(x.rows() == y.rows(), "x and y must have the same number of rows");
 
         const int n = degree;
         const int m = x.rows();
         const float xmax = x.maxCoeff();
         const float xmin = x.minCoeff();
 
-        dbg_assert(std::abs(xmax - xmin) > 0.00001, "Error: vector x should not have all equal values");
-        dbg_assert(degree >= 1, "degree must be >= 1");
+        SC_ASSERT(std::abs(xmax - xmin) > 0.00001, "Error: vector x should not have all equal values");
+        SC_ASSERT(degree >= 1, "degree must be >= 1");
 
         const VectorXf x_norm = ((2*x).array() - (xmax + xmin)) / (xmax - xmin);
 
@@ -456,24 +466,24 @@ namespace turtle::sc {
         }
 
         // ColPivHouseholderQR<MatrixXf> T_Qr = T.colPivHouseholderQr();
-        // dbg_assert(T_Qr.rank() == degree, "");
+        // SC_ASSERT(T_Qr.rank() == degree, "");
 
         HouseholderQR<MatrixXf> T_Qr = T.householderQr();
-        dbg_assert(T.colPivHouseholderQr().rank() == degree, "T.colPivHouseholderQr().rank() == degree");
+        SC_ASSERT(T.colPivHouseholderQr().rank() == degree, "T.colPivHouseholderQr().rank() == degree");
 
         return chebpoly(T_Qr.solve(y), xmin, xmax);
     }
 
     VectorXf chebeval(const VectorXf& x, const chebpoly& b, const int degree) {
-        dbg_assert(degree >= 1, "degree must be a positive integer");
+        SC_ASSERT(degree >= 1, "degree must be a positive integer");
 
         const int n = degree;
         const int m = x.rows();
         const float xmax = b.xmax;
         const float xmin = b.xmin;
 
-        dbg_assert(std::abs(xmax - xmin) > 0.00001, "Error: vector x should not have all equal values");
-        dbg_assert(degree >= 1, "degree must be >= 1");
+        SC_ASSERT(std::abs(xmax - xmin) > 0.00001, "Error: vector x should not have all equal values");
+        SC_ASSERT(degree >= 1, "degree must be >= 1");
 
         const VectorXf x_norm = ((2*x).array() - (xmax + xmin)) / (xmax - xmin);
 
@@ -559,7 +569,7 @@ namespace turtle::sc {
         toppra::algorithm::TOPPRA algo(constraints, path);
         toppra::ReturnCode rc1 = algo.computePathParametrization(0, 0);
 
-        dbg_assert(rc1 == toppra::ReturnCode::OK, "");
+        SC_ASSERT(rc1 == toppra::ReturnCode::OK, "");
 
         toppra::ParametrizationData pd = algo.getParameterizationData();
 
@@ -785,8 +795,8 @@ namespace turtle::sc {
             bound_rect = {vertices[0].x(), vertices[0].x(), vertices[0].y(), vertices[0].y()};
             lines.reserve(edges.size());
             for (const auto& edge : edges) {
-                dbg_assert(std::get<0>(edge) < vertices.size(), "edge must reference indices within the vertex list");
-                dbg_assert(std::get<1>(edge) < vertices.size(), "edge must reference indices within the vertex list");
+                SC_ASSERT(std::get<0>(edge) < vertices.size(), "edge must reference indices within the vertex list");
+                SC_ASSERT(std::get<1>(edge) < vertices.size(), "edge must reference indices within the vertex list");
 
                 lines.push_back({vertices[std::get<0>(edge)], vertices[std::get<1>(edge)]});
 
