@@ -45,7 +45,6 @@ class TestVLJV : public LinearJointVelocity {
 };
 
 int main() {
-    dbg_assert(true, "");
 
     std::vector<Vector2f> ctrl_pts;
 
