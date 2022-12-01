@@ -810,6 +810,7 @@ namespace turtle::sc {
         public:
             std::vector<Vector2f> sample_free(const int n);
             float cost(const Vector2f a, const Vector2f b) const;
+            std::vector<Vector2f> near(const Vector2f b, const std::vector<Vector2f>& nodes, const float dist) const;
 
             planning_space(const bounding_rect& br);
 
@@ -859,6 +860,19 @@ namespace turtle::sc {
         using std::sqrt;
         using std::pow;
         return sqrt(pow(b.x()-a.x(), 2) + pow(b.y()-a.y(), 2));
+    }
+
+    std::vector<Vector2f> planning_space::near(const Vector2f b, const std::vector<Vector2f>& nodes, const float dist) const {
+        std::vector<Vector2f> nodes_out;
+        nodes_out.reserve(nodes.size());
+        using std::sqrt;
+        using std::pow;
+        for (auto& a : nodes) {
+            if (sqrt(pow(b.x()-a.x(), 2) + pow(b.y()-a.y(), 2))) {
+                nodes_out.push_back(a);
+            }
+        }
+        return nodes_out;
     }
 
     void fast_marching_trees(const Vector2f x_init, const int n) {
