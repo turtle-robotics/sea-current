@@ -894,11 +894,7 @@ namespace turtle::sc {
         point_set V_closed;
         point_set V_open = {x_init};
         point_set V_unvisited = sample_free(n);
-        point_set V = V_unvisited;
         V_unvisited.insert(x_goal);
-        V.insert(x_init);
-
-        std::vector<std::tuple<Vector2f, Vector2f>> E;
 
         Vector2f z = x_init;
 
@@ -911,12 +907,11 @@ namespace turtle::sc {
 
         const float inf = std::numeric_limits<float>::max();
 
-        // while (pt_dist(z, x_goal) > 0.01) {
         while (z != x_goal) {
             point_set V_open_new;
             point_set X_near = near(z, V_unvisited, rn);
             for (const auto& x : X_near) {
-                point_set Y_near = near(x, V_open, rn);
+                const point_set Y_near = near(x, V_open, rn);
                 if (Y_near.size() == 0) continue;
                 Vector2f y_min = *Y_near.begin();
                 for (const auto& y : Y_near) {
@@ -927,7 +922,6 @@ namespace turtle::sc {
 
                 if (cost(x, y_min) != inf) {
                     parent_map.insert_or_assign(x, y_min);
-                    E.push_back({y_min, x});
                     V_open_new.insert(x);
                     V_unvisited.erase(x);
                     cost_map.insert_or_assign(x, cost_map[y_min].value_or(inf) + cost(x, y_min));
