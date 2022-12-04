@@ -8,10 +8,11 @@
 #include <algorithm>
 #include <tuple>
 #include <functional>
-#include <unordered_set>
 #include <queue>
 #include <limits>
-#include <set>
+#include <unordered_set>
+#include <unordered_map>
+#include <optional>
 
 #include <Eigen/Dense>
 #include <unsupported/Eigen/FFT>
@@ -607,6 +608,9 @@ namespace turtle::sc {
         return velocity_profile(pos, vel, acc, times);
     }
 
+    inline float pt_dist(const Vector2f& u, const Vector2f& v) {
+        return std::sqrt(std::pow(v.x() - u.x(), 2) + std::pow(v.y() - u.y(), 2));
+    }
 
     struct fmt_node {
         const Vector2f pt;
@@ -806,11 +810,24 @@ namespace turtle::sc {
         }
     };
 
+
+    struct hash_vector2f {
+        size_t operator()(const Vector2f v) const {
+            float fa = v.x();
+            float fb = v.y();
+            const int32_t a = reinterpret_cast<int32_t&>(fa);
+            const int32_t b = reinterpret_cast<int32_t&>(fb);
+            return std::hash<int32_t>()(a) ^ std::hash<int32_t>()(b);
+        }
+    };
+    using point_set = std::unordered_set<Vector2f, hash_vector2f>;
+
     class planning_space {
         public:
-            std::vector<Vector2f> sample_free(const int n);
+            point_set sample_free(const int n);
             float cost(const Vector2f a, const Vector2f b) const;
-            std::vector<Vector2f> near(const Vector2f b, const std::vector<Vector2f>& nodes, const float dist) const;
+            point_set near(const Vector2f b, const point_set& nodes, const float dist) const;
+            std::optional<std::vector<Vector2f>> fast_marching_trees(const Vector2f& x_init, const Vector2f& x_goal, const int n, const float rn);
 
             planning_space(const bounding_rect& br);
 
@@ -820,12 +837,13 @@ namespace turtle::sc {
             halton_state y_state;
     };
 
+
     planning_space::planning_space(const bounding_rect& br) : bound_rect(br) {}
 
-    std::vector<Vector2f> planning_space::sample_free(const int n) {
+    point_set planning_space::sample_free(const int n) {
         // technically this should be a set, but the halton sequence is guaranteed to not repeat
         // so we can avoid element checks for a set
-        std::vector<Vector2f> pts;
+        point_set pts = {Vector2f(0,0)};
         pts.reserve(n);
 
         while (n > pts.size()) {
@@ -840,14 +858,14 @@ namespace turtle::sc {
                 for (auto& obstacle : obstacles) {
                     if (obstacle.contains(test)) add = false;
                 }
-                if (add) pts.push_back(test);
+                if (add) pts.insert(test);
             }
         }
 
         return pts;
     }
 
-    float planning_space::cost(const Vector2f a, const Vector2f b) const {
+    inline float planning_space::cost(const Vector2f a, const Vector2f b) const {
         const std::tuple<Vector2f, Vector2f> line = {a, b};
         for (auto& obstacle : obstacles) {
             for (auto& oline : obstacle.lines) {
@@ -857,37 +875,92 @@ namespace turtle::sc {
             }
         }
 
-        using std::sqrt;
-        using std::pow;
-        return sqrt(pow(b.x()-a.x(), 2) + pow(b.y()-a.y(), 2));
+        return pt_dist(a, b);
     }
 
-    std::vector<Vector2f> planning_space::near(const Vector2f b, const std::vector<Vector2f>& nodes, const float dist) const {
-        std::vector<Vector2f> nodes_out;
+    inline point_set planning_space::near(const Vector2f b, const point_set& nodes, const float dist) const {
+        point_set nodes_out;
         nodes_out.reserve(nodes.size());
-        using std::sqrt;
-        using std::pow;
         for (auto& a : nodes) {
-            if (sqrt(pow(b.x()-a.x(), 2) + pow(b.y()-a.y(), 2))) {
-                nodes_out.push_back(a);
+            if (pt_dist(a, b) <= std::pow(dist, 2) && a != b) {
+                nodes_out.insert(a);
             }
         }
         return nodes_out;
     }
 
-    void fast_marching_trees(const Vector2f x_init, const int n) {
-        // using point_set = std::vector<Vector2f>;
+    std::optional<std::vector<Vector2f>> planning_space::fast_marching_trees(const Vector2f& x_init, const Vector2f& x_goal, const int n, const float rn) {
+        // TODO; replace std::optional return type with std::variant + some error type
+        point_set V_closed;
+        point_set V_open = {x_init};
+        point_set V_unvisited = sample_free(n);
+        point_set V = V_unvisited;
+        V_unvisited.insert(x_goal);
+        V.insert(x_init);
 
-        // point_set E;
+        std::vector<std::tuple<Vector2f, Vector2f>> E;
 
-        // point_set W = sample_free(n);
+        Vector2f z = x_init;
 
-        // point_set V = W;
-        // V.push_back(x_init);
+        std::unordered_map<Vector2f, std::optional<float>, hash_vector2f> cost_map;
+        cost_map.emplace(x_init, std::optional<float>{0});
 
-        // std::priority_queue<Vector2f, std::vector<Vector2f>> H;
-        // H.push(x_init);
+        std::unordered_map<Vector2f, Vector2f, hash_vector2f> parent_map;
+        parent_map.emplace(x_init, x_init);
 
+
+        const float inf = std::numeric_limits<float>::max();
+
+        // while (pt_dist(z, x_goal) > 0.01) {
+        while (z != x_goal) {
+            point_set V_open_new;
+            point_set X_near = near(z, V_unvisited, rn);
+            for (const auto& x : X_near) {
+                point_set Y_near = near(x, V_open, rn);
+                if (Y_near.size() == 0) continue;
+                Vector2f y_min = *Y_near.begin();
+                for (const auto& y : Y_near) {
+                    const float cost_y_min = cost_map[y_min].value_or(inf) + cost(x, y_min);
+                    const float cost_y = cost_map[y].value_or(inf) + cost(x, y);
+                    if (cost_y < cost_y_min) y_min = y;
+                }
+
+                if (cost(x, y_min) != inf) {
+                    parent_map.insert_or_assign(x, y_min);
+                    E.push_back({y_min, x});
+                    V_open_new.insert(x);
+                    V_unvisited.erase(x);
+                    cost_map.insert_or_assign(x, cost_map[y_min].value_or(inf) + cost(x, y_min));
+                }
+
+            }
+
+            V_open.merge(V_open_new);
+            V_open.erase(z);
+            V_closed.insert(z);
+
+            if (V_open.size() == 0) {
+                return std::nullopt;
+            }
+
+            z = *V_open.begin();
+            for (const auto& y : V_open) {
+                const float cost_z = cost_map[z].value_or(inf);
+                const float cost_y = cost_map[y].value_or(inf);
+                if (cost_y < cost_z) {
+                    z = y;
+                }
+            }
+        }
+
+        std::vector<Vector2f> path;
+
+        Vector2f p = z;
+        while (p != x_init) {
+            path.push_back(p);
+            p = parent_map[p];
+        }
+        path.push_back(x_init);
+        return std::optional<std::vector<Vector2f>>{path};
     }
-
 }

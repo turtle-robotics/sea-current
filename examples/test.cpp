@@ -189,7 +189,8 @@ int main() {
     space.obstacles.push_back(ob);
     space.obstacles.push_back(ob2);
 
-    std::vector<Vector2f> pts = space.sample_free(2560);
+    point_set pts_set = space.sample_free(2560);
+    std::vector<Vector2f> pts(pts_set.begin(), pts_set.end());
 
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -210,6 +211,26 @@ int main() {
         // std::cout << x3[i] << " " << y3[i] << std::endl;
     }
 
+    start = std::chrono::high_resolution_clock::now();
+    std::vector<Vector2f> path = space.fast_marching_trees(Vector2f(-0.5, 1), Vector2f(1, -1), 200, 1).value();
+    end = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    std::cout << (duration.count() / 1000.0)<< std::endl;
+
+    std::cout << path.size() << std::endl;
+    std::vector<float> x5;
+    std::vector<float> y5;
+    x5.reserve(path.size());
+    y5.reserve(path.size());
+    for (const auto& p : path) {
+        x5.push_back(p.x());
+        y5.push_back(p.y());
+        // std::cout << p.x() << " " << p.y() << std::endl;
+    }
+
     plt::plot(x4, y4, "o");
+
+    plt::plot(x5, y5);
+
     plt::show();
 }
