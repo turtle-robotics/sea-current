@@ -612,22 +612,6 @@ namespace turtle::sc {
         return std::sqrt(std::pow(v.x() - u.x(), 2) + std::pow(v.y() - u.y(), 2));
     }
 
-    struct fmt_node {
-        const Vector2f pt;
-        Vector2f parent;
-        float cost;
-
-        float x() {
-            return pt(0);
-        }
-
-        float y() {
-            return pt(1);
-        }
-
-        // fmt_node(const Vector2f pt, Vector) {}
-    };
-
     struct halton_state {
         int f = 0;
         int i = 0;
