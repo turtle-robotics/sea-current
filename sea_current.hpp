@@ -53,6 +53,217 @@ namespace turtle::sc {
 
     using namespace std::complex_literals;
 
+    struct bounding_rect {
+        float x_max;
+        float x_min;
+        float y_max;
+        float y_min;
+
+        inline bool contains(const Vector2f& point) {
+            return point.x() <= x_max &&
+                   point.x() >= x_min &&
+                   point.y() <= y_max &&
+                   point.y() >= y_min;
+        }
+
+        inline void enclose_point(const Vector2f& pt) {
+            if (pt.x() > x_max) x_max = pt.x();
+            if (pt.x() < x_min) x_min = pt.x();
+            if (pt.y() > y_max) y_max = pt.y();
+            if (pt.y() < y_min) y_min = pt.y();
+        }
+
+        bounding_rect(const float x_max, const float x_min, const float y_max, const float y_min) : x_max(x_max), x_min(x_min), y_max(y_max), y_min(y_min) {}
+    };
+
+    inline float pt_dist(const Vector2f& u, const Vector2f& v={0,0}) {
+        return std::sqrt(std::pow(v.x() - u.x(), 2) + std::pow(v.y() - u.y(), 2));
+    }
+
+    struct halton_state {
+        int f = 0;
+        int i = 0;
+        halton_state(int f, int i) : f(f), i(i) {}
+        halton_state() : f(0), i(0) {}
+    };
+
+    std::vector<float> halton(const int b, const int n, halton_state& state) {
+        std::vector<float> nums(n);
+
+        int f = 0;
+        int i = 1;
+
+        if (state.i != 0 && state.f != 0) {
+            i = state.i;
+            f = state.f;
+        }
+
+        for (int j = 0; j < n; ++j) {
+
+            const int x = i - f;
+            if (x == 1) {
+                f = 1;
+                i *= b;
+            } else {
+                int y = std::floor(i / b);
+                while (x <= y) {
+                    y = std::floor(y / b);
+                }
+                f = (b + 1) * y - x;
+            }
+
+            nums[j] = static_cast<float>(f) / i;
+        }
+
+        state.f = f;
+        state.i = i;
+
+        return nums;
+    }
+
+
+
+    inline float cross2d(Vector2f u, Vector2f v) {
+        return u.x()*v.y() - u.y()*v.x();
+    }
+
+    std::tuple<bool, Vector2f> intersects(std::tuple<Vector2f, Vector2f> l, std::tuple<Vector2f, Vector2f> k) {
+        const float a = cross2d(std::get<0>(k)-std::get<0>(l), std::get<1>(l)-std::get<0>(l));
+        const float b = cross2d(std::get<1>(l)-std::get<0>(l), std::get<1>(k)-std::get<0>(k));
+
+        if (a == 0 && b == 0) {
+            // float ax = std::get<0>(l).x();
+            // float bx = std::get<1>(l).x();
+            // float cx = std::get<0>(k).x();
+            // float dx = std::get<1>(k).x();
+
+            // using std::max;
+            // using std::min;
+
+            // return (max(ax, bx) >= min(cx, dx) && min(ax, bx) <= min(cx, dx))
+            //     || (max(cx, dx) >= min(ax, bx) && min(cx, dx) <= min(ax, bx))
+            //     || (min(ax, bx) <= max(cx, dx) && max(ax, bx) >= max(cx, dx))
+            //     || (min(cx, dx) <= max(ax, bx) && max(cx, dx) >= max(ax, bx));
+
+            // TODO: consider a different way of handling colinear segments
+            return {false, Vector2f(0, 0)};
+        } else if (b == 0 && a != 0) {
+            return {false, Vector2f(0, 0)};
+        } else if (b != 0) {
+            const float u = a / b;
+
+            const float c = cross2d(std::get<0>(k)-std::get<0>(l), std::get<1>(k)-std::get<0>(k));
+            // float d = cross2d(std::get<1>(l)-std::get<0>(l), std::get<1>(k)-std::get<0>(k));
+            const float d = b;
+
+            const float t = c / d;
+
+            if (0 <= u && u <= 1 && 0 <= t && t <= 1) {
+                return {true, t*(std::get<1>(l)-std::get<0>(l))+std::get<0>(l)};
+            }
+        }
+        return {false, Vector2f(0, 0)};
+    }
+    struct obstacle {
+        std::vector<std::tuple<Vector2f, Vector2f>> lines;
+        std::vector<Vector2f> vertices;
+        bounding_rect bound_rect = {0, 0, 0, 0};
+
+        bool contains(const Vector2f& point) {
+            if (!bound_rect.contains(point)) return false;
+
+            const Vector2f outside_pt(bound_rect.x_max+1, bound_rect.y_max+1);
+
+            int count = 0;
+
+            std::vector<bool> corners(vertices.size());
+            for (auto& line : lines) {
+                auto [ints, int_pt] = intersects({outside_pt, point}, line);
+                if (ints) {
+                    bool counted = false;
+
+                    for (int i = 0; i < vertices.size(); ++i) {
+                        using std::abs;
+                        if (abs(int_pt.x() - vertices[i].x()) <= 0.00001 &&
+                            abs(int_pt.y() - vertices[i].y()) <= 0.00001) {
+
+                            if (corners[i]) {
+                                counted = true;
+                                continue;
+                            }
+
+
+                            corners[i] = true;
+                            count++;
+                            counted = true;
+                            break;
+                        }
+                    }
+
+                    if (!counted) count++;
+                }
+            }
+
+
+            return count % 2 == 1;
+        }
+
+        obstacle(std::vector<Vector2f> vertices) : vertices(vertices) {
+            bound_rect = {vertices[0].x(), vertices[0].x(), vertices[0].y(), vertices[0].y()};
+
+            if (vertices.size() % 2 == 0) {
+                vertices.push_back(vertices[0]);
+            }
+
+            lines.resize(vertices.size()-1);
+
+            for (int i = 0; i < vertices.size() - 1; ++i) {
+                lines[i] = {vertices[i], vertices[i+1]};
+
+                bound_rect.enclose_point(vertices[i]);
+            }
+        }
+
+        obstacle(std::vector<Vector2f> vertices, std::vector<std::tuple<int, int>> edges) : vertices(vertices) {
+            bound_rect = {vertices[0].x(), vertices[0].x(), vertices[0].y(), vertices[0].y()};
+            lines.reserve(edges.size());
+            for (const auto& edge : edges) {
+                SC_ASSERT(std::get<0>(edge) < vertices.size(), "edge must reference indices within the vertex list");
+                SC_ASSERT(std::get<1>(edge) < vertices.size(), "edge must reference indices within the vertex list");
+
+                lines.push_back({vertices[std::get<0>(edge)], vertices[std::get<1>(edge)]});
+
+                bound_rect.enclose_point(vertices[std::get<0>(edge)]);
+                bound_rect.enclose_point(vertices[std::get<1>(edge)]);
+            }
+        }
+    };
+
+    struct hash_vector2f {
+        size_t operator()(const Vector2f v) const {
+            float fa = v.x();
+            float fb = v.y();
+            const int32_t a = reinterpret_cast<int32_t&>(fa);
+            const int32_t b = reinterpret_cast<int32_t&>(fb);
+            return std::hash<int32_t>()(a) ^ std::hash<int32_t>()(b);
+        }
+    };
+    using point_set = std::unordered_set<Vector2f, hash_vector2f>;
+
+    class planning_space {
+        public:
+            point_set sample_free(const int n);
+            float cost(const Vector2f a, const Vector2f b) const;
+            point_set near(const Vector2f b, const point_set& nodes, const float dist) const;
+            std::optional<std::vector<Vector2f>> fast_marching_trees(const Vector2f& x_init, const Vector2f& x_goal, const int n, const float rn);
+
+            planning_space(const bounding_rect& br);
+
+            std::vector<obstacle> obstacles;
+            bounding_rect bound_rect;
+            halton_state x_state;
+            halton_state y_state;
+    };
 
     struct arclength_data {
         float arclength;
@@ -71,6 +282,72 @@ namespace turtle::sc {
     chebpoly chebfit(const VectorXf& x, const VectorXf& y, const int degree);
     VectorXf chebeval(const VectorXf& x, const chebpoly& b, const int degree);
 
+    inline Vector2f calc_start_tangent(const Vector2f& W_0, const Vector2f& W_1, const float theta);
+
+
+    inline float tangent_magnitude(const Vector2f& W_0, const Vector2f& W_1, const Vector2f& W_2) {
+        return 0.5 * std::min(pt_dist(W_0, W_1), pt_dist(W_1, W_2));
+    }
+
+    inline Vector2f calc_tangent(const Vector2f& W_0, const Vector2f& W_1, const Vector2f& W_2) {
+        // std::cout << "calc_tangent call ------------------" << std::endl;
+        // std::cout << "W_0 " << W_0.x() << " " << W_0.y() << std::endl;
+        // std::cout << "W_1 " << W_1.x() << " " << W_1.y() << std::endl;
+        // std::cout << "W_2 " << W_2.x() << " " << W_2.y() << std::endl;
+        const Vector2f u = W_0 - W_1;
+        const Vector2f v = W_2 - W_1;
+        // std::cout << "u " << u.x() << " " << u.y() << std::endl;
+        // std::cout << "v " << v.x() << " " << v.y() << std::endl;
+        float u_dot_v = u.dot(v);
+        const float denom = pt_dist(u) * pt_dist(v);
+        const float theta = std::acos((u_dot_v) / denom) / 2;
+
+        // const float offset = std::atan2(-u.y(), -u.x());
+        const float offset = std::atan2(u.y(), u.x());
+        const float test_offset = std::atan2(v.y(), v.x());
+
+        int mult = 1;
+        if (test_offset - offset < 0) mult = -1;
+
+        // std::cout << "theta " << (theta * 180 / 3.1415926535) << std::endl;
+        // std::cout << "offset " << (offset * 180 / 3.1415926535) << std::endl;
+
+        // std::cout << "offset " << offset << std::endl;
+
+        Vector2f l90(std::sin(offset + (mult * theta)), -std::cos(offset + (mult * theta)));
+        l90 = l90.normalized();
+        // Vector2f r90 = -l90;
+
+        // std::cout << "calc_tangent end ????????????" << std::endl;
+        int mult2 = -1;
+        if (pt_dist(W_1+l90, W_2) < pt_dist(W_1+(-l90), W_2)) {
+            // return tangent_magnitude(W_0, W_1, W_2) * l90;
+            mult2 = 1;
+        }
+        return tangent_magnitude(W_0, W_1, W_2) * (mult2 * l90);
+
+        // // std::cout << (u_dot_v) / denom << std::endl;
+        // std::cout << "theta " << (180 * theta / 3.1415926535) << std::endl;
+
+        // return tangent_magnitude(W_0, W_1, W_2) * Vector2f(std::cos(theta), std::sin(theta));
+
+        // // return calc_start_tangent(W_1, W_2, theta);
+
+    }
+
+    inline Vector2f calc_start_tangent(const Vector2f& W_0, const Vector2f& W_1, const float theta) {
+        // Vector2f tmp(std::cos(theta), std::sin(theta));
+        // std::cout << "wtfff " << tmp.x() << " " << tmp.y() << std::endl;
+        // std::cout << tangent_magnitude(W_0, W_1, W_0) << std::endl;
+        // Vector2f tmp2 = tangent_magnitude(W_0, W_1, W_0) * Vector2f(std::cos(theta), std::sin(theta));
+        // std::cout << "wtfff2 " << tmp2.x() << " " << tmp2.y() << std::endl;
+        return tangent_magnitude(W_0, W_1, W_0) * Vector2f(std::cos(theta), std::sin(theta));
+    }
+
+    inline Vector2f calc_end_tangent(const Vector2f& W_1, const Vector2f W_2) {
+        return tangent_magnitude(W_1, W_2, W_1) * (W_2 - W_1).normalized();
+    }
+
     class bezier_spline {
         public:
             std::vector<std::vector<Vector2f>> ctrl_pts;
@@ -80,8 +357,12 @@ namespace turtle::sc {
 
             bezier_spline() = default;
             bezier_spline(const std::vector<std::vector<Vector2f>>& ctrl_pts, const Matrix<float, Dynamic, 2>& pts, const std::vector<VectorXf>& positions);
+            bezier_spline(const std::vector<std::vector<Vector2f>>& ctrl_pts, const std::vector<VectorXf>& positions); // uniform positions for each curve
 
-            static bezier_spline join_splines(std::vector<bezier_spline>& splines);
+            static bezier_spline join_splines(const std::vector<bezier_spline>& splines);
+
+            static Vector2f shrink_tangent(const Vector2f& T, const Vector2f& W, const float k, const planning_space& ps);
+            static bezier_spline from_path(const std::vector<Vector2f>& path, const planning_space& ps, float start_angle);
 
             static bezier_spline bezier_curve(const std::vector<Vector2f>& ctrl_pts, const std::vector<float>& positions);
             static bezier_spline bezier_curve(const std::vector<Vector2f>& ctrl_pts, const VectorXf& positions);
@@ -102,12 +383,13 @@ namespace turtle::sc {
 
         private:
             template <typename T, typename Y>
-            static inline T coerce(T& num, Y low, Y high) {
+            static inline T coerce(const T& num, const Y& low, const Y& high) {
                 if (num < low) return low;
                 else if (num > high) return high;
                 return num;
             }
     };
+
 
     bezier_spline::bezier_spline(const std::vector<std::vector<Vector2f>>& ctrl_pts, const Matrix<float, Dynamic, 2>& pts, const std::vector<VectorXf>& positions) : ctrl_pts(ctrl_pts), pts(pts), positions(positions) {}
 
@@ -124,7 +406,7 @@ namespace turtle::sc {
     }
 
     // it's ok that this is static as a new matrix would have to be allocated either way
-    bezier_spline bezier_spline::join_splines(std::vector<bezier_spline>& splines) {
+    bezier_spline bezier_spline::join_splines(const std::vector<bezier_spline>& splines) {
         std::vector<std::vector<Vector2f>> ctrl_pts;
         std::vector<VectorXf> positions;
         std::vector<Matrix<std::complex<float>, Dynamic, 2>> Qs;
@@ -150,6 +432,115 @@ namespace turtle::sc {
         bezier_spline bs = bezier_spline(ctrl_pts, joined_pts, positions);
         bs.Q_cache = Qs;
         return bs;
+    }
+
+    inline Vector2f bezier_spline::shrink_tangent(const Vector2f& T, const Vector2f& W, const float k, const planning_space& ps) {
+        Vector2f ret_pt = k * T;
+        // std::cout << "ret_pt " << ret_pt.x() << " " << ret_pt.y() << std::endl;
+        // std::cout << "W " << W.x() << " " << W.y() << std::endl;
+        for (auto& obstacle : ps.obstacles) {
+            for (auto& oline : obstacle.lines) {
+                auto [ints, int_pt] = intersects({W+ret_pt, W}, oline);
+                if (ints) {
+                    ret_pt = int_pt - W;
+                }
+                auto [ints2, int_pt2] = intersects({W-ret_pt, W}, oline);
+                if (ints2) {
+                    // std::cout << "ints2 " << int_pt2.x() << " " << int_pt2.y() << std::endl;
+                    // ret_pt = -(int_pt2 - W);
+                    ret_pt = W - int_pt2;
+                }
+                // std::cout << "ret_pt " << ret_pt.x() << " " << ret_pt.y() << std::endl;
+            }
+        }
+
+        return ret_pt;
+    }
+
+    bezier_spline bezier_spline::from_path(const std::vector<Vector2f>& path, const planning_space& ps, float start_angle=NAN) {
+        SC_ASSERT(path.size() >= 2, "Not enough points for a path");
+
+        // std::vector<bezier_spline> parts;
+        std::vector<Vector2f> tangents;
+        tangents.reserve(path.size());
+
+        if (std::isnan(start_angle)) {
+            const Vector2f tmp_diff = path[1] - path[0];
+            start_angle = std::atan2(tmp_diff.y(), tmp_diff.x());
+            // std::cout << "start angle " << (start_angle * 180 / 3.1415926) << std::endl;
+        }
+
+        constexpr float k = 1;
+
+        Vector2f T_0 = calc_start_tangent(path[0], path[1], start_angle);
+        T_0 = shrink_tangent(T_0, path[0], k, ps);
+        // std::cout << "T_0 " << T_0.x() << " " << T_0.y() << std::endl;
+        tangents.push_back(T_0);
+
+        Vector2f T_e = calc_end_tangent(path[path.size() - 2], path[path.size() - 1]);
+        T_e = shrink_tangent(T_e, path[path.size() - 1], k, ps);
+        // std::cout << "T_e " << T_e.x() << " " << T_e.y() << std::endl;
+        for (std::size_t i = 1; i < path.size() - 1; ++i) {
+            // std::vector<Vector2f> ctrl_pts;
+            // std::vector<Vector2f> ctrl_pts2;
+
+            const Vector2f W_0 = path[i-1];
+            const Vector2f W_1 = path[i];
+            const Vector2f W_2 = path[i+1];
+
+            // const Vector2f T_0 = calc_start_tangent(W_0, W_1, start_angle);
+            Vector2f T_1 = calc_tangent(W_0, W_1, W_2);
+            // std::cout << "T_1 " << T_1.x() << " " << T_1.y() << std::endl;
+            // const Vector2f T_2 = calc_end_tangent(W_1, W_2);
+
+
+            // T_0 = shrink_tangent(T_0, W_0, k, ps);
+            T_1 = shrink_tangent(T_1, W_1, k, ps);
+            tangents.push_back(T_1);
+            // T_2 = shrink_tangent(T_2, W_2, k, ps);
+
+
+            // ctrl_pts.push_back(W_0);
+            // ctrl_pts.push_back(W_0 + T_0);
+            // ctrl_pts.push_back(W_1 - T_1);
+            // ctrl_pts.push_back(W_1);
+
+            // ctrl_pts2.push_back(W_1);
+            // ctrl_pts2.push_back(W_1 + T_1);
+            // ctrl_pts2.push_back(W_2 - T_2);
+            // ctrl_pts2.push_back(W_2);
+
+            // bezier_spline bs = bezier_spline::bezier_curve(ctrl_pts, 0.0001);
+            // bezier_spline bs2 = bezier_spline::bezier_curve(ctrl_pts2, 0.0001);
+            // parts.push_back(bs);
+            // parts.push_back(bs2);
+        }
+        tangents.push_back(T_e);
+
+        std::vector<bezier_spline> parts;
+        parts.reserve(path.size());
+        for (std::size_t i = 0; i < path.size() - 1; ++i) {
+            const Vector2f W_0 = path[i];
+            const Vector2f W_1 = path[i+1];
+
+            std::vector<Vector2f> ctrl_pts;
+
+            ctrl_pts.push_back(W_0);
+            ctrl_pts.push_back(W_0 + tangents[i]);
+            ctrl_pts.push_back(W_1 - tangents[i+1]);
+            ctrl_pts.push_back(W_1);
+            // std::cout << "T[0] " << tangents[i].x() << " " << tangents[i].y() << std::endl;
+            // std::cout << "T[1] " << tangents[i+1].x() << " " << tangents[i+1].y() << std::endl;
+            Vector2f tmp = W_1 - tangents[i+1];
+            // std::cout << tmp.x() << " " << tmp.y() << std::endl;
+            // std::cout << "W_0 " << W_0.x() << " " << T_e.y() << std::endl;
+            // std::cout << "W_1 " << ctrl_pts[1].x() << " " << ctrl_pts[1].y() << std::endl;
+            // std::cout << "W_2 " << ctrl_pts[2].x() << " " << ctrl_pts[2].y() << std::endl;
+            // std::cout << "W_3 " << W_1.x() << " " << W_1.y() << std::endl;
+            bezier_spline bs = bezier_spline::bezier_curve(ctrl_pts, 0.0001);
+            parts.push_back(bs);
+        }
+        return join_splines(parts);
     }
 
     inline bezier_spline bezier_spline::bezier_curve(const std::vector<Vector2f>& ctrl_pts, const std::vector<float>& positions) {
@@ -226,9 +617,8 @@ namespace turtle::sc {
 
         std::vector<float> positions(n+1);
         for (std::size_t i = 0; i <= n; ++i) {
-            positions[i] = std::min(i * precision, 1.0f);
+            positions[i] = std::max(0.0f, std::min(i * precision, 1.0f));
         }
-
         return bezier_curve(ctrl_pts, positions);
     }
 
@@ -385,32 +775,67 @@ namespace turtle::sc {
 
         std::vector<bezier_spline> curves(positions.size());
 
+        // std::cout << "ppr " << profile_pos.rows() << std::endl;
         int j = 0;
+        float offset = 0;
         for (int i = 0; i < positions.size(); ++i) {
             const VectorXf seg = ad.segments[i];
             const float last = seg(seg.rows()-1);
-            float offset = 0;
+            // std::cout << "first " << seg(0) << std::endl;
+            // std::cout << "last " << last << std::endl;
+            // std::cout << "offset " << offset << std::endl;
             int start = j;
             for (; j < profile_pos.rows() && (profile_pos(j) - offset <= last); ++j) {} // cursed
+            // std::cout << "ppj - off " << (profile_pos(j) - offset) << std::endl;
+            // std::cout << "diff " << (j - start) << std::endl;
+            if (i + 1 == positions.size()) j = profile_pos.rows() - 1;
             j -= 1;
+            // std::cout << "ppj - off2 " << (profile_pos(j) - offset) << std::endl;
+            // std::cout << "j " << j << std::endl;
             offset = profile_pos(j);
 
-            VectorXf block = profile_pos.block(start, 0, ((j+1)-start), 1).array() - profile_pos(start);
+            const VectorXf block = profile_pos.block(start, 0, ((j+1)-start), 1).array() - profile_pos(start);
+            // std::cout << "block size " << block.rows() << std::endl;
+            // std::cout << "block end " << block(block.rows() - 1) << std::endl;
 
-            const int degree = std::max(seg.rows()/2, 2L);
+            // const int degree = std::max(seg.rows()/2, 2L);
+            const int degree = std::min(10L, seg.rows()); // TODO: figure out a better heuristic for polynomial degree
 
 
             // polynomial from segment arclength to [0,1]
-            chebpoly poly = chebfit(seg, ad.positions[i], degree);
-            VectorXf positions_fixed = chebeval(block, poly, degree);
+            const chebpoly poly = chebfit(seg, ad.positions[i], degree);
+            const VectorXf positions_fixed = chebeval(block, poly, degree);
+
+            // std::cout << "positions_fixed " << positions_fixed(positions_fixed.rows() - 1) << std::endl;
+
+            // std::cout << "degree " << degree << std::endl;
+            // std::cout << "ad.positions[0] " << ad.positions[i][0] << std::endl;
+            // std::cout << "ad.positions[-1] " << ad.positions[i][ad.positions[i].rows() - 1] << std::endl;
+            // std::cout << "ad.positions[max] " << ad.positions[i].maxCoeff() << std::endl;
 
             curves[i] = bezier_curve(ctrl_pts[i], positions_fixed, Q_cache[i]);
+
+            // std::cout << "curve size " << curves[i].n_pts() << std::endl;
+            // std::cout << "curve end " << curves[i].arclength().arclength << std::endl;
+            // std::cout << "curve end pos " << curves[i].positions[0](curves[i].positions[0].rows() - 1) << std::endl;
+            // std::cout << "-------------" << std::endl;
         }
 
+        // float sum = 0;
+        // for (auto& curve : curves) {
+        //     sum += curve.arclength().arclength;
+        //     std::cout << curve.arclength().arclength << std::endl;
+        // }
+        // std::cout << "sum " << sum << std::endl;
+
         bezier_spline fixed_spline = join_splines(curves);
+        // std::cout << "fixed spline " << fixed_spline.n_pts() << " " << profile_pos.rows() << std::endl;
+        // std::cout << profile_pos(profile_pos.rows() - 1) << std::endl;
+        // std::cout << fixed_spline.arclength().arclength << std::endl;
         SC_ASSERT(fixed_spline.n_pts() == profile_pos.rows(), "fixed_spline.n_pts() == profile_pos.rows()");
         return fixed_spline;
     }
+
 
     std::vector<float> bezier_spline::curvature() const {
         // TODO: implement this
@@ -608,218 +1033,9 @@ namespace turtle::sc {
         return velocity_profile(pos, vel, acc, times);
     }
 
-    inline float pt_dist(const Vector2f& u, const Vector2f& v) {
-        return std::sqrt(std::pow(v.x() - u.x(), 2) + std::pow(v.y() - u.y(), 2));
-    }
-
-    struct halton_state {
-        int f = 0;
-        int i = 0;
-        halton_state(int f, int i) : f(f), i(i) {}
-        halton_state() : f(0), i(0) {}
-    };
-
-    std::vector<float> halton(const int b, const int n, halton_state& state) {
-        std::vector<float> nums(n);
-
-        int f = 0;
-        int i = 1;
-
-        if (state.i != 0 && state.f != 0) {
-            i = state.i;
-            f = state.f;
-        }
-
-        for (int j = 0; j < n; ++j) {
-
-            const int x = i - f;
-            if (x == 1) {
-                f = 1;
-                i *= b;
-            } else {
-                int y = std::floor(i / b);
-                while (x <= y) {
-                    y = std::floor(y / b);
-                }
-                f = (b + 1) * y - x;
-            }
-
-            nums[j] = static_cast<float>(f) / i;
-        }
-
-        state.f = f;
-        state.i = i;
-
-        return nums;
-    }
 
 
-    struct bounding_rect {
-        float x_max;
-        float x_min;
-        float y_max;
-        float y_min;
 
-        inline bool contains(const Vector2f& point) {
-            return point.x() <= x_max &&
-                   point.x() >= x_min &&
-                   point.y() <= y_max &&
-                   point.y() >= y_min;
-        }
-
-        inline void enclose_point(const Vector2f& pt) {
-            if (pt.x() > x_max) x_max = pt.x();
-            if (pt.x() < x_min) x_min = pt.x();
-            if (pt.y() > y_max) y_max = pt.y();
-            if (pt.y() < y_min) y_min = pt.y();
-        }
-
-        bounding_rect(const float x_max, const float x_min, const float y_max, const float y_min) : x_max(x_max), x_min(x_min), y_max(y_max), y_min(y_min) {}
-    };
-
-    inline float cross2d(Vector2f u, Vector2f v) {
-        return u.x()*v.y() - u.y()*v.x();
-    }
-
-    std::tuple<bool, Vector2f> intersects(std::tuple<Vector2f, Vector2f> l, std::tuple<Vector2f, Vector2f> k) {
-        const float a = cross2d(std::get<0>(k)-std::get<0>(l), std::get<1>(l)-std::get<0>(l));
-        const float b = cross2d(std::get<1>(l)-std::get<0>(l), std::get<1>(k)-std::get<0>(k));
-
-        if (a == 0 && b == 0) {
-            // float ax = std::get<0>(l).x();
-            // float bx = std::get<1>(l).x();
-            // float cx = std::get<0>(k).x();
-            // float dx = std::get<1>(k).x();
-
-            // using std::max;
-            // using std::min;
-
-            // return (max(ax, bx) >= min(cx, dx) && min(ax, bx) <= min(cx, dx))
-            //     || (max(cx, dx) >= min(ax, bx) && min(cx, dx) <= min(ax, bx))
-            //     || (min(ax, bx) <= max(cx, dx) && max(ax, bx) >= max(cx, dx))
-            //     || (min(cx, dx) <= max(ax, bx) && max(cx, dx) >= max(ax, bx));
-
-            // TODO: consider a different way of handling colinear segments
-            return {false, Vector2f(0, 0)};
-        } else if (b == 0 && a != 0) {
-            return {false, Vector2f(0, 0)};
-        } else if (b != 0) {
-            const float u = a / b;
-
-            const float c = cross2d(std::get<0>(k)-std::get<0>(l), std::get<1>(k)-std::get<0>(k));
-            // float d = cross2d(std::get<1>(l)-std::get<0>(l), std::get<1>(k)-std::get<0>(k));
-            const float d = b;
-
-            const float t = c / d;
-
-            if (0 <= u && u <= 1 && 0 <= t && t <= 1) {
-                return {true, t*(std::get<1>(l)-std::get<0>(l))+std::get<0>(l)};
-            }
-        }
-        return {false, Vector2f(0, 0)};
-    }
-
-    struct obstacle {
-        std::vector<std::tuple<Vector2f, Vector2f>> lines;
-        std::vector<Vector2f> vertices;
-        bounding_rect bound_rect = {0, 0, 0, 0};
-
-        bool contains(const Vector2f& point) {
-            if (!bound_rect.contains(point)) return false;
-
-            const Vector2f outside_pt(bound_rect.x_max+1, bound_rect.y_max+1);
-
-            int count = 0;
-
-            std::vector<bool> corners(vertices.size());
-            for (auto& line : lines) {
-                auto [ints, int_pt] = intersects({outside_pt, point}, line);
-                if (ints) {
-                    bool counted = false;
-
-                    for (int i = 0; i < vertices.size(); ++i) {
-                        using std::abs;
-                        if (abs(int_pt.x() - vertices[i].x()) <= 0.00001 &&
-                            abs(int_pt.y() - vertices[i].y()) <= 0.00001) {
-
-                            if (corners[i]) {
-                                counted = true;
-                                continue;
-                            }
-
-
-                            corners[i] = true;
-                            count++;
-                            counted = true;
-                            break;
-                        }
-                    }
-
-                    if (!counted) count++;
-                }
-            }
-
-
-            return count % 2 == 1;
-        }
-
-        obstacle(std::vector<Vector2f> vertices) : vertices(vertices) {
-            bound_rect = {vertices[0].x(), vertices[0].x(), vertices[0].y(), vertices[0].y()};
-
-            if (vertices.size() % 2 == 0) {
-                vertices.push_back(vertices[0]);
-            }
-
-            lines.resize(vertices.size()-1);
-
-            for (int i = 0; i < vertices.size() - 1; ++i) {
-                lines[i] = {vertices[i], vertices[i+1]};
-
-                bound_rect.enclose_point(vertices[i]);
-            }
-        }
-
-        obstacle(std::vector<Vector2f> vertices, std::vector<std::tuple<int, int>> edges) : vertices(vertices) {
-            bound_rect = {vertices[0].x(), vertices[0].x(), vertices[0].y(), vertices[0].y()};
-            lines.reserve(edges.size());
-            for (const auto& edge : edges) {
-                SC_ASSERT(std::get<0>(edge) < vertices.size(), "edge must reference indices within the vertex list");
-                SC_ASSERT(std::get<1>(edge) < vertices.size(), "edge must reference indices within the vertex list");
-
-                lines.push_back({vertices[std::get<0>(edge)], vertices[std::get<1>(edge)]});
-
-                bound_rect.enclose_point(vertices[std::get<0>(edge)]);
-                bound_rect.enclose_point(vertices[std::get<1>(edge)]);
-            }
-        }
-    };
-
-
-    struct hash_vector2f {
-        size_t operator()(const Vector2f v) const {
-            float fa = v.x();
-            float fb = v.y();
-            const int32_t a = reinterpret_cast<int32_t&>(fa);
-            const int32_t b = reinterpret_cast<int32_t&>(fb);
-            return std::hash<int32_t>()(a) ^ std::hash<int32_t>()(b);
-        }
-    };
-    using point_set = std::unordered_set<Vector2f, hash_vector2f>;
-
-    class planning_space {
-        public:
-            point_set sample_free(const int n);
-            float cost(const Vector2f a, const Vector2f b) const;
-            point_set near(const Vector2f b, const point_set& nodes, const float dist) const;
-            std::optional<std::vector<Vector2f>> fast_marching_trees(const Vector2f& x_init, const Vector2f& x_goal, const int n, const float rn);
-
-            planning_space(const bounding_rect& br);
-
-            std::vector<obstacle> obstacles;
-            bounding_rect bound_rect;
-            halton_state x_state;
-            halton_state y_state;
-    };
 
 
     planning_space::planning_space(const bounding_rect& br) : bound_rect(br) {}
@@ -939,6 +1155,7 @@ namespace turtle::sc {
             p = parent_map[p];
         }
         path.push_back(x_init);
+        std::reverse(path.begin(), path.end());
         return std::optional<std::vector<Vector2f>>{path};
     }
 }

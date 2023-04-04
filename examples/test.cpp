@@ -44,18 +44,80 @@ class TestVLJV : public LinearJointVelocity {
     }
 };
 
+// inline Vector2f calc_start_tangent(const Vector2f& W_0, const Vector2f& W_1, const float theta);
+
+
+// inline float tangent_magnitude(const Vector2f& W_0, const Vector2f& W_1, const Vector2f& W_2) {
+//     return 0.5 * std::min(pt_dist(W_0, W_1), pt_dist(W_1, W_2));
+// }
+
+// inline Vector2f calc_tangent(const Vector2f& W_0, const Vector2f& W_1, const Vector2f& W_2) {
+//     const Vector2f u = W_0 - W_1;
+//     const Vector2f v = W_2 - W_1;
+//     // std::cout << "u " << u.x() << " " << u.y() << std::endl;
+//     // std::cout << "v " << v.x() << " " << v.y() << std::endl;
+//     float u_dot_v = u.dot(v);
+//     const float denom = pt_dist(u) * pt_dist(v);
+//     const float theta = std::acos((u_dot_v) / denom);
+//     // std::cout << (u_dot_v) / denom << std::endl;
+//     // std::cout << "theta " << theta << std::endl;
+
+//     return tangent_magnitude(W_0, W_1, W_2) * Vector2f(std::cos(theta), std::sin(theta));
+
+//     // return calc_start_tangent(W_1, W_2, theta);
+// }
+
+// inline Vector2f calc_start_tangent(const Vector2f& W_0, const Vector2f& W_1, const float theta) {
+//     return tangent_magnitude(W_0, W_1, W_0) * Vector2f(std::cos(theta), std::sin(theta));
+// }
+
+// inline Vector2f calc_end_tangent(const Vector2f& W_1, const Vector2f W_2) {
+//     return tangent_magnitude(W_1, W_2, W_1) * (W_2 - W_1).normalized();
+// }
+
 int main() {
 
     std::vector<Vector2f> ctrl_pts;
+    std::vector<Vector2f> ctrl_pts2;
 
-    ctrl_pts.push_back(Vector2f(-1.0, 0.0));
-    // ctrl_pts.push_back(Vector2f(-0.6, 0.5));
-    ctrl_pts.push_back(Vector2f(-0.5, 0.5));
-    ctrl_pts.push_back(Vector2f(0.5, -0.5));
-    ctrl_pts.push_back(Vector2f(1.0, 0.0));
+    const Vector2f W_0(0, 0);
+    const Vector2f W_1(0.5, 0.5);
+    const Vector2f W_2(1, 0);
+
+    const Vector2f T_0 = calc_start_tangent(W_0, W_1, 0);
+    const Vector2f T_1 = calc_tangent(W_0, W_1, W_2);
+    const Vector2f T_2 = calc_end_tangent(W_1, W_2);
+
+    constexpr float k = 0.2;
+    std::cout << "T_0 " << T_0.x() << " " << T_0.y() << std::endl;
+    std::cout << "T_1 " << T_1.x() << " " << T_1.y() << std::endl;
+    std::cout << "T_2 " << T_2.x() << " " << T_2.y() << std::endl;
+
+    ctrl_pts.push_back(W_0);
+    ctrl_pts.push_back(W_0 + (k) * T_0);
+    ctrl_pts.push_back(W_1 - (k) * T_1);
+    ctrl_pts.push_back(W_1);
+
+    ctrl_pts2.push_back(W_1);
+    ctrl_pts2.push_back(W_1 + (k) * T_1);
+    ctrl_pts2.push_back(W_2 - (k) * T_2);
+    ctrl_pts2.push_back(W_2);
+
+    // ctrl_pts.push_back(Vector2f(-1.0, 0.0));
+    // ctrl_pts.push_back(Vector2f(-0.5, 0.5));
+    // ctrl_pts.push_back(Vector2f(0.5, -0.5));
+    // ctrl_pts.push_back(Vector2f(1.0, 0.0));
+
+    for (auto& ctrl_pt : ctrl_pts) {
+        std::cout << "ctrl_pt: " << ctrl_pt.x() << " " << ctrl_pt.y() << std::endl;
+    }
 
     auto start = std::chrono::high_resolution_clock::now();
+    std::cout << "die?" << std::endl;
     bezier_spline bs = bezier_spline::bezier_curve(ctrl_pts, 0.0001);
+    bezier_spline bs2 = bezier_spline::bezier_curve(ctrl_pts2, 0.0001);
+    std::cout << "die?" << std::endl;
+    bs = bezier_spline::join_splines({bs, bs2});
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     std::cout << (duration.count() / 1000.0)<< std::endl;
@@ -88,7 +150,10 @@ int main() {
     float arclen = bs.arclength(0.01).arclength;
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    std::cout << arclen << std::endl;
+    // std::cout << "here";
+    std::cout << "arclength: " << arclen << std::endl;
+    std::cout << "arclength2: " << bs2.arclength(0.01).arclength << std::endl;
+    // std::cout << "here";
     std::cout << (duration.count() / 1000.0)<< std::endl;
 
 
@@ -166,7 +231,9 @@ int main() {
 
 
     arclength_data ad = bs.arclength();
+    std::cout << "die?" << std::endl;
     bezier_spline re = bs.resample(pos_plot, ad, true);
+    std::cout << "die?" << std::endl;
 
     std::vector<float> x3(re.n_pts());
     std::vector<float> y3(re.n_pts());
@@ -186,8 +253,10 @@ int main() {
 
     obstacle ob({Vector2f(-0.5, 0), Vector2f(1, 0), Vector2f(1, 1), Vector2f(0, 1)});
     obstacle ob2({Vector2f(0, -0.5), Vector2f(1, 0), Vector2f(1, 1), Vector2f(0, 1)});
+    obstacle ob3({Vector2f(-0.6, 0.148), Vector2f(-1, 0.148), Vector2f(-1, 0), Vector2f(-0.6, 0)});
     space.obstacles.push_back(ob);
     space.obstacles.push_back(ob2);
+    space.obstacles.push_back(ob3);
 
     point_set pts_set = space.sample_free(2560);
     std::vector<Vector2f> pts(pts_set.begin(), pts_set.end());
@@ -228,9 +297,31 @@ int main() {
         // std::cout << p.x() << " " << p.y() << std::endl;
     }
 
+    bezier_spline pad = bezier_spline::from_path(path, space);
+    std::vector<float> x6(pad.n_pts());
+    std::vector<float> y6(pad.n_pts());
+    for (int i = 0; i < pad.n_pts(); ++i) {
+        x6[i] = pad.pts(i, 0);
+        y6[i] = pad.pts(i, 1);
+        // std::cout << "x: " << x6[i] << " y: " << y6[i] << std::endl;
+    }
+
+    std::vector<float> x7;
+    std::vector<float> y7;
+    for (int i = 0; i < pad.ctrl_pts[0].size(); ++i) {
+        // x7[i] = pad.ctrl_pts[0][i].x();
+        // y7[i] = pad.ctrl_pts[0][i].y();
+        for (int j = 0; j < pad.ctrl_pts.size() && j < 1; ++j) {
+            x7.push_back(pad.ctrl_pts[j][i].x());
+            y7.push_back(pad.ctrl_pts[j][i].y());
+        }
+    }
+
     plt::plot(x4, y4, "o");
 
     plt::plot(x5, y5);
+    plt::plot(x6, y6);
+    plt::plot(x7, y7, "o");
 
     plt::show();
 }
