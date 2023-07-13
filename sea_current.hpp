@@ -808,7 +808,8 @@ namespace turtle::sc {
             for (; j < profile_pos.rows() && (profile_pos(j) - offset <= last); ++j) {} // cursed
             // std::cout << "ppj - off " << (profile_pos(j) - offset) << std::endl;
             // std::cout << "diff " << (j - start) << std::endl;
-            if (i + 1 == positions.size()) j = profile_pos.rows();
+            if (i + 1 == positions.size() && i == 0) j = profile_pos.rows();
+            else if (i + 1 == positions.size()) j = profile_pos.rows() - 1;
             j -= 1;
             // std::cout << "ppj - off2 " << (profile_pos(j) - offset) << std::endl;
             // std::cout << "j " << j << std::endl;

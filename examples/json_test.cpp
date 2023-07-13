@@ -12,7 +12,7 @@ int main() {
     planning_space space(br);
 
 
-    std::vector<Vector2f> path = {Vector2f(0, 0), Vector2f(1, 0)};
+    std::vector<Vector2f> path = {Vector2f(0, 0), Vector2f(1, 0), Vector2f(0, 1)};
     bezier_spline pad = bezier_spline::from_path(path, space);
 
     arclength_data ad = pad.arclength();
