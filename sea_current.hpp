@@ -13,6 +13,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <optional>
+#include <string>
 
 #include <Eigen/Dense>
 #include <unsupported/Eigen/FFT>
@@ -25,6 +26,10 @@
 #include <toppra/algorithm/toppra.hpp>
 #include <toppra/parametrizer.hpp>
 #include <toppra/parametrizer/spline.hpp>
+
+#include <fstream>
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
 
 #ifdef DEBUG
 #define SC_ASSERT(cnd, msg)                                                           \
@@ -256,6 +261,7 @@ namespace turtle::sc {
             float cost(const Vector2f a, const Vector2f b) const;
             point_set near(const Vector2f b, const point_set& nodes, const float dist) const;
             std::optional<std::vector<Vector2f>> fast_marching_trees(const Vector2f& x_init, const Vector2f& x_goal, const int n, const float rn);
+            void register_free_space_constraint(std::function<bool(Vector2f)>);
 
             planning_space(const bounding_rect& br);
 
@@ -389,6 +395,18 @@ namespace turtle::sc {
                 return num;
             }
     };
+
+    class planner {
+        public:
+            planning_space ps;
+
+            Vector2f pick_next_goal_point() const;
+            // void update_planning_space();
+    };
+
+    Vector2f planner::pick_next_goal_point() const {
+
+    }
 
 
     bezier_spline::bezier_spline(const std::vector<std::vector<Vector2f>>& ctrl_pts, const Matrix<float, Dynamic, 2>& pts, const std::vector<VectorXf>& positions) : ctrl_pts(ctrl_pts), pts(pts), positions(positions) {}
@@ -766,6 +784,8 @@ namespace turtle::sc {
                 if (profile_pos(i) < profile_pos(i-1) || profile_pos(i) > profile_pos(i+1)) {
                     profile_pos(i) = (profile_pos(i-1) + profile_pos(i+1)) / 2;
                 }
+                // if (profile_pos(i) < 0) profile_pos(i) = 0;
+                // if (profile_pos(i) > 1) profile_pos(i) = 1;
             }
         }
 
@@ -788,15 +808,15 @@ namespace turtle::sc {
             for (; j < profile_pos.rows() && (profile_pos(j) - offset <= last); ++j) {} // cursed
             // std::cout << "ppj - off " << (profile_pos(j) - offset) << std::endl;
             // std::cout << "diff " << (j - start) << std::endl;
-            if (i + 1 == positions.size()) j = profile_pos.rows() - 1;
+            if (i + 1 == positions.size()) j = profile_pos.rows();
             j -= 1;
             // std::cout << "ppj - off2 " << (profile_pos(j) - offset) << std::endl;
             // std::cout << "j " << j << std::endl;
             offset = profile_pos(j);
 
             const VectorXf block = profile_pos.block(start, 0, ((j+1)-start), 1).array() - profile_pos(start);
-            // std::cout << "block size " << block.rows() << std::endl;
-            // std::cout << "block end " << block(block.rows() - 1) << std::endl;
+            std::cout << "block size " << block.rows() << std::endl;
+            std::cout << "block end " << block(block.rows() - 1) << std::endl;
 
             // const int degree = std::max(seg.rows()/2, 2L);
             const int degree = std::min(10L, seg.rows()); // TODO: figure out a better heuristic for polynomial degree
@@ -804,7 +824,7 @@ namespace turtle::sc {
 
             // polynomial from segment arclength to [0,1]
             const chebpoly poly = chebfit(seg, ad.positions[i], degree);
-            const VectorXf positions_fixed = chebeval(block, poly, degree);
+            VectorXf positions_fixed = chebeval(block, poly, degree);
 
             // std::cout << "positions_fixed " << positions_fixed(positions_fixed.rows() - 1) << std::endl;
 
@@ -813,6 +833,13 @@ namespace turtle::sc {
             // std::cout << "ad.positions[-1] " << ad.positions[i][ad.positions[i].rows() - 1] << std::endl;
             // std::cout << "ad.positions[max] " << ad.positions[i].maxCoeff() << std::endl;
 
+            std::cout << positions_fixed.minCoeff() << std::endl;
+            std::cout << positions_fixed.rows() << std::endl;
+            for (std::size_t i = 0; i < positions_fixed.rows(); ++i) {
+                if (positions_fixed(i) < 0) positions_fixed(i) = 0;
+                if (positions_fixed(i) > 1) positions_fixed(i) = 1;
+                // std::cout << positions_fixed(i) << std::endl;
+            }
             curves[i] = bezier_curve(ctrl_pts[i], positions_fixed, Q_cache[i]);
 
             // std::cout << "curve size " << curves[i].n_pts() << std::endl;
@@ -829,9 +856,9 @@ namespace turtle::sc {
         // std::cout << "sum " << sum << std::endl;
 
         bezier_spline fixed_spline = join_splines(curves);
-        // std::cout << "fixed spline " << fixed_spline.n_pts() << " " << profile_pos.rows() << std::endl;
-        // std::cout << profile_pos(profile_pos.rows() - 1) << std::endl;
-        // std::cout << fixed_spline.arclength().arclength << std::endl;
+        std::cout << "fixed spline " << fixed_spline.n_pts() << " " << profile_pos.rows() << std::endl;
+        std::cout << profile_pos(profile_pos.rows() - 1) << std::endl;
+        std::cout << fixed_spline.arclength().arclength << std::endl;
         SC_ASSERT(fixed_spline.n_pts() == profile_pos.rows(), "fixed_spline.n_pts() == profile_pos.rows()");
         return fixed_spline;
     }
@@ -1157,5 +1184,37 @@ namespace turtle::sc {
         path.push_back(x_init);
         std::reverse(path.begin(), path.end());
         return std::optional<std::vector<Vector2f>>{path};
+    }
+
+
+    template <typename T>
+    std::vector<std::vector<T>> format_vel_prof(const std::vector<VectorXf>& prof) {
+        std::vector<std::vector<T>> prof_ser(prof.size());
+        for (std::size_t i = 0; i < prof.size(); ++i) {
+            prof_ser[i] = std::vector<T>(prof[i].data(), prof[i].data()+prof[i].size());
+        }
+        return prof_ser;
+    }
+
+    // quick and dirty serialization
+    void serialize_path_to_file(const std::string& name, const bezier_spline& spline, const velocity_profile& vel_prof ) {
+        std::ofstream o(name);
+
+        json j;
+
+        j["pos"] = format_vel_prof<float>(vel_prof.pos);
+        j["vel"] = format_vel_prof<float>(vel_prof.vel);
+        j["acc"] = format_vel_prof<float>(vel_prof.acc);
+        // j["time"] = format_vel_prof<double>(vel_prof.time);
+
+        auto&& pts = spline.pts;
+        j["pos_x"] = std::vector<float>(pts.col(0).data(), pts.col(0).data() + pts.rows());
+        j["pos_y"] = std::vector<float>(pts.col(1).data(), pts.col(1).data() + pts.rows());
+
+
+
+        o << std::setw(4) << j << std::endl;
+    // std::vector<double>(prof.time.data(), prof.time.data()+prof.time.size());
+    // std::vector<float>(pos_plot.data(), pos_plot.data()+pos_plot.size());
     }
 }

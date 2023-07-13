@@ -4,3 +4,6 @@
 [submodule "third-party/toppra"]
 	path = third-party/toppra
 	url = https://github.com/hungpham2511/toppra
+[submodule "third-party/json"]
+	path = third-party/json
+	url = https://github.com/nlohmann/json
