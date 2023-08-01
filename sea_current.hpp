@@ -27,7 +27,6 @@
 #include <toppra/parametrizer.hpp>
 #include <toppra/parametrizer/spline.hpp>
 
-#include <fstream>
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -354,6 +353,15 @@ namespace turtle::sc {
         return tangent_magnitude(W_1, W_2, W_1) * (W_2 - W_1).normalized();
     }
 
+    struct velocity_profile {
+        std::vector<VectorXf> pos;
+        std::vector<VectorXf> vel;
+        std::vector<VectorXf> acc;
+        toppra::Vector time;
+
+        velocity_profile(std::vector<VectorXf> pos, std::vector<VectorXf> vel, std::vector<VectorXf> acc, toppra::Vector time) : pos(pos), vel(vel), acc(acc), time(time) {}
+    };
+
     class bezier_spline {
         public:
             std::vector<std::vector<Vector2f>> ctrl_pts;
@@ -382,6 +390,9 @@ namespace turtle::sc {
             arclength_data arclength(const float precision) const;
             std::vector<float> curvature() const;
             bezier_spline hodograph() const;
+            std::vector<float> angular_velocity(const velocity_profile& vel_prof) const;
+            std::vector<float> angular_velocity2(const velocity_profile& vel_prof) const;
+
             bezier_spline resample(VectorXf& profile_pos, arclength_data ad, bool nudge_positions) const;
 
             // helper function for bezier_curve
@@ -784,12 +795,15 @@ namespace turtle::sc {
                 if (profile_pos(i) < profile_pos(i-1) || profile_pos(i) > profile_pos(i+1)) {
                     profile_pos(i) = (profile_pos(i-1) + profile_pos(i+1)) / 2;
                 }
-                // if (profile_pos(i) < 0) profile_pos(i) = 0;
-                // if (profile_pos(i) > 1) profile_pos(i) = 1;
+                if (profile_pos(i) < 0) profile_pos(i) = 0;
+                if (profile_pos(i) > ad.arclength) profile_pos(i) = ad.arclength;
             }
         }
 
         SC_ASSERT(profile_pos.rows() > 0, "The vector of positions to be sampled must not be empty");
+        // std::cout << "pp mc " << profile_pos.maxCoeff() << std::endl;
+        // std::cout << "pp mc2 " << profile_pos(profile_pos.rows() - 2) << std::endl;
+        // std::cout << "arklen " << ad.arclength << std::endl;
         SC_ASSERT(profile_pos.maxCoeff() <= ad.arclength, "The profile can not go beyond the arclength of the spline");
         SC_ASSERT(profile_pos.minCoeff() >= 0, "The profile can not go beyond the arclength of the spline");
 
@@ -816,8 +830,8 @@ namespace turtle::sc {
             offset = profile_pos(j);
 
             const VectorXf block = profile_pos.block(start, 0, ((j+1)-start), 1).array() - profile_pos(start);
-            std::cout << "block size " << block.rows() << std::endl;
-            std::cout << "block end " << block(block.rows() - 1) << std::endl;
+            // std::cout << "block size " << block.rows() << std::endl;
+            // std::cout << "block end " << block(block.rows() - 1) << std::endl;
 
             // const int degree = std::max(seg.rows()/2, 2L);
             const int degree = std::min(10L, seg.rows()); // TODO: figure out a better heuristic for polynomial degree
@@ -834,8 +848,8 @@ namespace turtle::sc {
             // std::cout << "ad.positions[-1] " << ad.positions[i][ad.positions[i].rows() - 1] << std::endl;
             // std::cout << "ad.positions[max] " << ad.positions[i].maxCoeff() << std::endl;
 
-            std::cout << positions_fixed.minCoeff() << std::endl;
-            std::cout << positions_fixed.rows() << std::endl;
+            // std::cout << positions_fixed.minCoeff() << std::endl;
+            // std::cout << positions_fixed.rows() << std::endl;
             for (std::size_t i = 0; i < positions_fixed.rows(); ++i) {
                 if (positions_fixed(i) < 0) positions_fixed(i) = 0;
                 if (positions_fixed(i) > 1) positions_fixed(i) = 1;
@@ -857,17 +871,45 @@ namespace turtle::sc {
         // std::cout << "sum " << sum << std::endl;
 
         bezier_spline fixed_spline = join_splines(curves);
-        std::cout << "fixed spline " << fixed_spline.n_pts() << " " << profile_pos.rows() << std::endl;
-        std::cout << profile_pos(profile_pos.rows() - 1) << std::endl;
-        std::cout << fixed_spline.arclength().arclength << std::endl;
+        // std::cout << "fixed spline " << fixed_spline.n_pts() << " " << profile_pos.rows() << std::endl;
+        // std::cout << profile_pos(profile_pos.rows() - 1) << std::endl;
+        // std::cout << fixed_spline.arclength().arclength << std::endl;
         SC_ASSERT(fixed_spline.n_pts() == profile_pos.rows(), "fixed_spline.n_pts() == profile_pos.rows()");
         return fixed_spline;
     }
 
+    // std::vector<float> num_diff(std::vector<float> f) {
+    //     SC_ASSERT(f.size() >= 3, "");
+
+    //     std::vector<float> d(f.size());
+    //     for (std::size_t i = 1; i < f.size() - 1; ++i) {
+
+    //         d[i] =
+    //     }
+    // }
 
     std::vector<float> bezier_spline::curvature() const {
-        // TODO: implement this
+        bezier_spline d = hodograph();
+        bezier_spline dd = d.hodograph();
 
+        std::vector<float> res(pts.rows());
+        for (std::size_t i = 0; i < pts.rows(); ++i) {
+            const Vector3f d_pt(d.pts(i, 0), d.pts(i, 1), 0);
+            const Vector3f dd_pt(dd.pts(i, 0), dd.pts(i, 1), 0);
+
+            // std::cout << "point 1: " << d_pt.x() << " " << d_pt.y() << std::endl;
+            // std::cout << "point 2: " << dd_pt.x() << " " << dd_pt.y() << std::endl;
+
+            const float k = (d_pt.x() * dd_pt.y() - d_pt.y() * dd_pt.x()) / std::pow(d_pt.x() * d_pt.x() + d_pt.y() * d_pt.y(), 1.5);
+            res[i] = k;
+
+            // const Vector3f pt3 = d_pt.cross(dd_pt);
+            // std::cout << "point 3: " << pt3.x() << " " << pt3.y() << " " << pt3.z() << std::endl;
+
+            // res[i] = d_pt.cross(dd_pt).norm() / std::pow(d_pt.norm(), 3);
+        }
+
+        return res;
     }
 
     bezier_spline bezier_spline::hodograph() const {
@@ -882,6 +924,47 @@ namespace turtle::sc {
         }
 
         return join_splines(curves);
+    }
+
+    std::vector<float> bezier_spline::angular_velocity(const velocity_profile& vel_prof) const {
+
+        const std::vector<float> curv = curvature();
+        auto&& vels = vel_prof.vel[0];
+
+        SC_ASSERT(curv.size() == vel_prof.vel[0].size(), "curvature and velocity vectors must be the same size");
+
+        std::vector<float> angular_velocities(curv.size());
+        for (std::size_t i = 0; i < angular_velocities.size(); ++i) {
+            angular_velocities[i] = vels[i] * curv[i];
+        }
+        return angular_velocities;
+    }
+
+    std::vector<float> bezier_spline::angular_velocity2(const velocity_profile& vel_prof) const {
+        bezier_spline d = hodograph();
+
+        SC_ASSERT(pts.rows() == vel_prof.vel[0].size(), "");
+
+        std::vector<float> res(pts.rows());
+
+        std::vector<float> rads(pts.rows());
+        for (std::size_t i = 0; i < pts.rows(); ++i) {
+            Vector3f d_pt(d.pts(i, 0), d.pts(i, 1), 0);
+            d_pt.normalize();
+            const float rad = std::atan2(d_pt.y(), d_pt.x());
+            std::cout << "rad " << rad << std::endl;
+            rads[i] = rad;
+        }
+
+        res[0] = 0;
+        res[res.size() - 1] = 0;
+
+        auto&& times = vel_prof.time;
+        for (std::size_t i = 1; i < res.size() - 1; ++i) {
+            res[i] = (rads[i+1] - rads[i]) / (times[i+1] - times[i]);
+        }
+
+        return res;
     }
 
     inline std::vector<std::complex<float>> bezier_spline::omega_table(const int degree) {
@@ -978,14 +1061,6 @@ namespace turtle::sc {
         }
     };
 
-    struct velocity_profile {
-        std::vector<VectorXf> pos;
-        std::vector<VectorXf> vel;
-        std::vector<VectorXf> acc;
-        toppra::Vector time;
-
-        velocity_profile(std::vector<VectorXf> pos, std::vector<VectorXf> vel, std::vector<VectorXf> acc, toppra::Vector time) : pos(pos), vel(vel), acc(acc), time(time) {}
-    };
 
     template <int N> requires (N >= 1)
     velocity_profile gen_vel_prof(const Vector<value_type, N>& pos_end,
@@ -995,7 +1070,7 @@ namespace turtle::sc {
                                   const vel_lim_func& vel_lim,
                                   const Vector<value_type, N>& acc_min,
                                   const Vector<value_type, N>& acc_max,
-                                  const int length=100) {
+                                  const float dt=0.02) {
         using namespace toppra;
         using namespace toppra::constraint;
 
@@ -1033,6 +1108,8 @@ namespace turtle::sc {
 
         Eigen::Matrix<toppra::value_type, 1, 2> interval = spp.pathInterval();
 
+        int length = std::ceil((interval(1) - interval(0)) / dt);
+        // std::cout << "length " << length << std::endl;
         toppra::Vector times = toppra::Vector::LinSpaced(length, interval(0), interval(1));
 
         toppra::Vectors path_pos = spp.eval(times, 0);
@@ -1189,7 +1266,7 @@ namespace turtle::sc {
 
 
     template <typename T>
-    std::vector<std::vector<T>> format_vel_prof(const std::vector<VectorXf>& prof) {
+    std::vector<std::vector<T>> format_vec_vecx(const std::vector<VectorXf>& prof) {
         std::vector<std::vector<T>> prof_ser(prof.size());
         for (std::size_t i = 0; i < prof.size(); ++i) {
             prof_ser[i] = std::vector<T>(prof[i].data(), prof[i].data()+prof[i].size());
@@ -1198,24 +1275,24 @@ namespace turtle::sc {
     }
 
     // quick and dirty serialization
-    void serialize_path_to_file(const std::string& name, const bezier_spline& spline, const velocity_profile& vel_prof ) {
-        std::ofstream o(name);
-
+    json serialize_path_to_json(const bezier_spline& spline, const velocity_profile& vel_prof, const arclength_data& arclens, const std::vector<float>& ang_vel) {
         json j;
 
-        j["pos"] = format_vel_prof<float>(vel_prof.pos);
-        j["vel"] = format_vel_prof<float>(vel_prof.vel);
-        j["acc"] = format_vel_prof<float>(vel_prof.acc);
-        // j["time"] = format_vel_prof<double>(vel_prof.time);
+        j["pos"] = format_vec_vecx<float>(vel_prof.pos);
+        j["vel"] = format_vec_vecx<float>(vel_prof.vel);
+        j["acc"] = format_vec_vecx<float>(vel_prof.acc);
+        j["time"] = std::vector<float>(vel_prof.time.data(), vel_prof.time.data() + vel_prof.time.size());
 
         auto&& pts = spline.pts;
         j["pos_x"] = std::vector<float>(pts.col(0).data(), pts.col(0).data() + pts.rows());
         j["pos_y"] = std::vector<float>(pts.col(1).data(), pts.col(1).data() + pts.rows());
 
+        j["ang_vel"] = ang_vel;
 
+        const std::vector<std::vector<float>> segments = format_vec_vecx<float>(arclens.segments);
+        const std::vector<std::vector<float>> positions = format_vec_vecx<float>(arclens.positions);
+        j["arclength"] = { {"arclength", arclens.arclength}, {"segments", segments}, {"positions", positions} };
 
-        o << std::setw(4) << j << std::endl;
-    // std::vector<double>(prof.time.data(), prof.time.data()+prof.time.size());
-    // std::vector<float>(pos_plot.data(), pos_plot.data()+pos_plot.size());
+        return j;
     }
 }

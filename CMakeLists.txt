@@ -37,11 +37,16 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/third-party/toppra/cpp")
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/third-party/json")
 
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/third-party/libzmq")
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/third-party/cppzmq")
+find_package(cppzmq)
+
 find_package(Eigen3 3.4)
 target_link_libraries(sea_current INTERFACE
     Eigen3::Eigen
     toppra
     nlohmann_json::nlohmann_json
+    cppzmq
 )
 
 option(BUILD_EXAMPLES "Build Examples" OFF)
@@ -57,6 +62,14 @@ if (BUILD_EXAMPLES)
   add_executable(json_test examples/json_test.cpp)
   target_link_libraries(json_test PRIVATE sea_current)
   set_target_properties(json_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+  add_executable(zmq_test examples/zmq_test.cpp)
+  target_link_libraries(zmq_test PRIVATE sea_current)
+  set_target_properties(zmq_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+  # add_executable(json_util examples/json_util.cpp)
+  # target_link_libraries(json_util PRIVATE sea_current)
+  # set_target_properties(json_util PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 endif ()
 
 install(FILES
