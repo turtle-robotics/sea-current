@@ -812,6 +812,7 @@ namespace turtle::sc {
         // std::cout << "ppr " << profile_pos.rows() << std::endl;
         int j = 0;
         float offset = 0;
+        std::size_t block_size_sum = 0;
         for (int i = 0; i < positions.size(); ++i) {
             const VectorXf seg = ad.segments[i];
             const float last = seg(seg.rows()-1);
@@ -830,8 +831,9 @@ namespace turtle::sc {
             offset = profile_pos(j);
 
             const VectorXf block = profile_pos.block(start, 0, ((j+1)-start), 1).array() - profile_pos(start);
-            // std::cout << "block size " << block.rows() << std::endl;
-            // std::cout << "block end " << block(block.rows() - 1) << std::endl;
+            block_size_sum += block.rows();
+            std::cout << "block size " << block.rows() << std::endl;
+            std::cout << "block end " << block(block.rows() - 1) << std::endl;
 
             // const int degree = std::max(seg.rows()/2, 2L);
             const int degree = std::min(10L, seg.rows()); // TODO: figure out a better heuristic for polynomial degree
@@ -870,10 +872,23 @@ namespace turtle::sc {
         // }
         // std::cout << "sum " << sum << std::endl;
 
+        if (block_size_sum > profile_pos.rows()) {
+            // remove pts and positions
+            const int diff = (block_size_sum - profile_pos.rows());
+            auto&& last_curve = curves[curves.size() - 1];
+            // std::cout << "die here> " << std::endl;
+            last_curve.pts = last_curve.pts.block(0, 0, last_curve.pts.rows() - diff, 2);
+            auto&& last_curve_last_pos = last_curve.positions[last_curve.positions.size() - 1];
+            // std::cout << "die here> " << std::endl;
+            last_curve_last_pos = last_curve_last_pos.block(0, 0, last_curve_last_pos.rows() - diff, 1);
+            // std::cout << "die here> " << std::endl;
+        }
+
         bezier_spline fixed_spline = join_splines(curves);
-        // std::cout << "fixed spline " << fixed_spline.n_pts() << " " << profile_pos.rows() << std::endl;
-        // std::cout << profile_pos(profile_pos.rows() - 1) << std::endl;
-        // std::cout << fixed_spline.arclength().arclength << std::endl;
+        std::cout << "fixed spline " << fixed_spline.n_pts() << " " << profile_pos.rows() << std::endl;
+        std::cout << block_size_sum << std::endl;
+        std::cout << profile_pos(profile_pos.rows() - 1) << std::endl;
+        std::cout << fixed_spline.arclength().arclength << std::endl;
         SC_ASSERT(fixed_spline.n_pts() == profile_pos.rows(), "fixed_spline.n_pts() == profile_pos.rows()");
         return fixed_spline;
     }
@@ -1278,16 +1293,16 @@ namespace turtle::sc {
     json serialize_path_to_json(const bezier_spline& spline, const velocity_profile& vel_prof, const arclength_data& arclens, const std::vector<float>& ang_vel) {
         json j;
 
-        j["pos"] = format_vec_vecx<float>(vel_prof.pos);
-        j["vel"] = format_vec_vecx<float>(vel_prof.vel);
-        j["acc"] = format_vec_vecx<float>(vel_prof.acc);
+        j["position"] = format_vec_vecx<float>(vel_prof.pos);
+        j["velocity"] = format_vec_vecx<float>(vel_prof.vel);
+        j["acceleration"] = format_vec_vecx<float>(vel_prof.acc);
         j["time"] = std::vector<float>(vel_prof.time.data(), vel_prof.time.data() + vel_prof.time.size());
 
         auto&& pts = spline.pts;
-        j["pos_x"] = std::vector<float>(pts.col(0).data(), pts.col(0).data() + pts.rows());
-        j["pos_y"] = std::vector<float>(pts.col(1).data(), pts.col(1).data() + pts.rows());
+        j["position_x"] = std::vector<float>(pts.col(0).data(), pts.col(0).data() + pts.rows());
+        j["position_y"] = std::vector<float>(pts.col(1).data(), pts.col(1).data() + pts.rows());
 
-        j["ang_vel"] = ang_vel;
+        j["angularVelocity"] = ang_vel;
 
         const std::vector<std::vector<float>> segments = format_vec_vecx<float>(arclens.segments);
         const std::vector<std::vector<float>> positions = format_vec_vecx<float>(arclens.positions);

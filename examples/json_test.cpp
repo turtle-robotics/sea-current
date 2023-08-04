@@ -16,7 +16,14 @@ int main() {
 
 
     // std::vector<Vector2f> path = {Vector2f(0, 0), Vector2f(1, 1), Vector2f(0, 2)};
-    std::vector<Vector2f> path = {Vector2f(0, 0), Vector2f(10, 0), Vector2f(10, 10)};
+    std::vector<Vector2f> path = {
+    Vector2f(0, 0),
+    Vector2f(10, 0),
+    Vector2f(10, 10),
+    Vector2f(10, 20),
+    Vector2f(30, 50),
+    Vector2f(0, 0)
+    };
     bezier_spline pad = bezier_spline::from_path(path, space);
 
     const arclength_data ad = pad.arclength();
