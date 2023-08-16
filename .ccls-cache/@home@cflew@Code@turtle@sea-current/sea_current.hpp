@@ -1281,50 +1281,34 @@ namespace turtle::sc {
 
 
     template <typename T>
-    std::vector<T> format_vec_vecx(const std::vector<VectorXf>& prof) {
-        std::vector<T> prof_ser;
+    std::vector<std::vector<T>> format_vec_vecx(const std::vector<VectorXf>& prof) {
+        std::vector<std::vector<T>> prof_ser(prof.size());
         for (std::size_t i = 0; i < prof.size(); ++i) {
-            std::vector<T> tmp = std::vector<T>(prof[i].data(), prof[i].data()+prof[i].size());
-            for (std::size_t j = 0; j < tmp.size(); ++j) {
-                prof_ser.push_back(tmp[i]);
-            }
+            prof_ser[i] = std::vector<T>(prof[i].data(), prof[i].data()+prof[i].size());
         }
         return prof_ser;
     }
 
     // quick and dirty serialization
     json serialize_path_to_json(const bezier_spline& spline, const velocity_profile& vel_prof, const arclength_data& arclens, const std::vector<float>& ang_vel) {
-        json j = json::array();
+        json j;
 
-        //j["position"] = format_vec_vecx<float>(vel_prof.pos);
-        const std::vector<float> velocities = format_vec_vecx<float>(vel_prof.vel);
-        const std::vector<float> accelerations = format_vec_vecx<float>(vel_prof.acc);
-        const std::vector<float> times = std::vector<float>(vel_prof.time.data(), vel_prof.time.data() + vel_prof.time.size());
+        j["position"] = format_vec_vecx<float>(vel_prof.pos);
+        j["velocity"] = format_vec_vecx<float>(vel_prof.vel);
+        j["acceleration"] = format_vec_vecx<float>(vel_prof.acc);
+        j["time"] = std::vector<float>(vel_prof.time.data(), vel_prof.time.data() + vel_prof.time.size());
 
         auto&& pts = spline.pts;
-        std::vector<float> pos_x = std::vector<float>(pts.col(0).data(), pts.col(0).data() + pts.rows());
-        std::vector<float> pos_y = std::vector<float>(pts.col(1).data(), pts.col(1).data() + pts.rows());
+        j["position_x"] = std::vector<float>(pts.col(0).data(), pts.col(0).data() + pts.rows());
+        j["position_y"] = std::vector<float>(pts.col(1).data(), pts.col(1).data() + pts.rows());
 
-        // const std::vector<std::vector<float>> segments = format_vec_vecx<float>(arclens.segments);
-        // const std::vector<std::vector<float>> positions = format_vec_vecx<float>(arclens.positions);
-        // j["arclength"] = { {"arclength", arclens.arclength}, {"segments", segments}, {"positions", positions} };
+        j["angularVelocity"] = ang_vel;
 
-        for (std::size_t i = 0; i < pts.rows(); ++i) {
-            json j2;
-            j2["time"] = times[i];
-            j2["velocity"] = velocities[i];
-            j2["acceleration"] = accelerations[i];
-            j2["angularVelocity"] = ang_vel[i];
-            // j2["curvature"]
+        const std::vector<std::vector<float>> segments = format_vec_vecx<float>(arclens.segments);
+        const std::vector<std::vector<float>> positions = format_vec_vecx<float>(arclens.positions);
+        j["arclength"] = { {"arclength", arclens.arclength}, {"segments", segments}, {"positions", positions} };
 
-            // j2["pose"]["rotation"]["radians"] 
-            j2["pose"]["translation"]["x"] = pos_x[i];
-            j2["pose"]["translation"]["y"] = pos_y[i];
-
-            j2["holonomicRotation"] = 0.0;
-            j2["holonomicAngularVelocity"] = 0.0;
-            j.push_back(j2);
-        }
+        for (std::size_t i ohn)
 
         return j;
     }
