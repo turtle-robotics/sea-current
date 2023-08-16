@@ -2,3 +2,4 @@
 build/
 cmake-build-debug/
 .envrc
+.ccls-cache
