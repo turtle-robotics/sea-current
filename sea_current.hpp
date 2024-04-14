@@ -57,20 +57,29 @@ namespace turtle::sc {
 
     using namespace std::complex_literals;
 
-    struct bounding_rect {
+    struct LIDAR_point{ // struct to handle a LIDAR point
+        double x;
+        double y;
+
+        Point(double xCoord, double yCoord) : x(xCoord), y(yCoord) {}
+    }
+
+    std::vector<Point> points;  // creates variable called 'points' of type LIDAR_point
+
+    struct bounding_rect {  // struct creates bounding rectangle that is initially of size
         float x_max;
         float x_min;
         float y_max;
         float y_min;
 
-        inline bool contains(const Vector2f& point) {
+        inline bool contains(const Vector2f& point) {   // contains method checks is 'point' is inside bounding rectangle (input: ,output: bool)
             return point.x() <= x_max &&
                    point.x() >= x_min &&
                    point.y() <= y_max &&
                    point.y() >= y_min;
         }
 
-        inline void enclose_point(const Vector2f& pt) {
+        inline void enclose_point(const Vector2f& pt) {    // enclose_point method will check if the point is inside bounding rectangle, if not then the bounding rectangle changes size to accommodate
             if (pt.x() > x_max) x_max = pt.x();
             if (pt.x() < x_min) x_min = pt.x();
             if (pt.y() > y_max) y_max = pt.y();
@@ -80,18 +89,18 @@ namespace turtle::sc {
         bounding_rect(const float x_max, const float x_min, const float y_max, const float y_min) : x_max(x_max), x_min(x_min), y_max(y_max), y_min(y_min) {}
     };
 
-    inline float pt_dist(const Vector2f& u, const Vector2f& v={0,0}) {
+    inline float pt_dist(const Vector2f& u, const Vector2f& v={0,0}) {  // pt_dist function returns the distance between points 'u' and 'v'
         return std::sqrt(std::pow(v.x() - u.x(), 2) + std::pow(v.y() - u.y(), 2));
     }
 
-    struct halton_state {
+    struct halton_state {   // halton_state struct will set 'f' and 'i' to values it is sent
         int f = 0;
         int i = 0;
         halton_state(int f, int i) : f(f), i(i) {}
         halton_state() : f(0), i(0) {}
     };
 
-    std::vector<float> halton(const int b, const int n, halton_state& state) {
+    std::vector<float> halton(const int b, const int n, halton_state& state) {  // halton function creates a vector 'nums' that contain a halton seqence
         std::vector<float> nums(n);
 
         int f = 0;
@@ -127,7 +136,7 @@ namespace turtle::sc {
 
 
 
-    inline float cross2d(Vector2f u, Vector2f v) {
+    inline float cross2d(Vector2f u, Vector2f v) {      // cross2d function returns the magnitude of the cross product of 'u' and 'v'
         return u.x()*v.y() - u.y()*v.x();
     }
 
@@ -170,7 +179,9 @@ namespace turtle::sc {
     }
     struct obstacle {
         std::vector<std::tuple<Vector2f, Vector2f>> lines;
+        // create function that turns points into lines
         std::vector<Vector2f> vertices;
+        std::bool closed_obstacle;    // Creates a bool to store whether or not the obstacle is open or closed -CB
         bounding_rect bound_rect = {0, 0, 0, 0};
 
         bool contains(const Vector2f& point) {
@@ -243,7 +254,7 @@ namespace turtle::sc {
         }
     };
 
-    struct hash_vector2f {
+    struct hash_vector2f {  // hash_vector2f is a struct that converts a float 2d vector to a single hash value
         size_t operator()(const Vector2f v) const {
             float fa = v.x();
             float fb = v.y();
@@ -413,6 +424,21 @@ namespace turtle::sc {
 
             Vector2f pick_next_goal_point() const;
             // void update_planning_space();
+            for (const obstacle& obs : obsacles) {   // Loop that will loop through all of the obstacles -CB
+                if (obs.closed_obstacle) {  // check to see if obstacle is closed   -CB
+                    continue;   // moves to the next iteration (if obstacle is closed)  -CB
+                }
+                // look for end point to move towards   -CB
+                // pick closest end point to robots location    -CB
+                // determine "look-around" point that is in line with the robot and the endpont, and is past the end point  -CB
+                // be sure that "look-around" point is within the area scanned by lidar (prevents blind collisions) -CB
+                // move  -CB
+                // once moved scan  -CB
+                // create a line between "close" scanned points (close should be some value slightly larger than how close the lidar will place points on an object -CB   
+                // if scanned points are not "close" enough add them to stack for potential objects -CB
+                // repet this process until scanned end point is "close" enough to a previously stored end point   -CB
+                // update the object to closed (obs.closed_obstacle = true;), ready to move to next iteration of loop   -CB
+            }
     };
 
     Vector2f planner::pick_next_goal_point() const {
