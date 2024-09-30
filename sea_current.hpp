@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <optional>
 #include <string>
+#include <stack>
 
 #include <Eigen/Dense>
 #include <unsupported/Eigen/FFT>
@@ -70,6 +71,7 @@ namespace turtle::sc {
                    point.y() >= y_min;
         }
 
+        // grows the bounding rect to enclose a point
         inline void enclose_point(const Vector2f& pt) {
             if (pt.x() > x_max) x_max = pt.x();
             if (pt.x() < x_min) x_min = pt.x();
@@ -80,10 +82,13 @@ namespace turtle::sc {
         bounding_rect(const float x_max, const float x_min, const float y_max, const float y_min) : x_max(x_max), x_min(x_min), y_max(y_max), y_min(y_min) {}
     };
 
+    // distance between 2 points in L2, if only one point is passed it returns the norm of that point in L2
     inline float pt_dist(const Vector2f& u, const Vector2f& v={0,0}) {
         return std::sqrt(std::pow(v.x() - u.x(), 2) + std::pow(v.y() - u.y(), 2));
     }
 
+    // halton sequence is a pseudo random sequence that i use to sample a subset of R2
+    // this struct stores the current state within the sequence, theres two numbers instead of one for seed/state
     struct halton_state {
         int f = 0;
         int i = 0;
@@ -91,6 +96,7 @@ namespace turtle::sc {
         halton_state() : f(0), i(0) {}
     };
 
+    // function that advances state
     std::vector<float> halton(const int b, const int n, halton_state& state) {
         std::vector<float> nums(n);
 
@@ -127,10 +133,12 @@ namespace turtle::sc {
 
 
 
+    // cross product of vectors in R2
     inline float cross2d(Vector2f u, Vector2f v) {
         return u.x()*v.y() - u.y()*v.x();
     }
 
+    // checks if 2 vectors intersect and returns the point where they do
     std::tuple<bool, Vector2f> intersects(std::tuple<Vector2f, Vector2f> l, std::tuple<Vector2f, Vector2f> k) {
         const float a = cross2d(std::get<0>(k)-std::get<0>(l), std::get<1>(l)-std::get<0>(l));
         const float b = cross2d(std::get<1>(l)-std::get<0>(l), std::get<1>(k)-std::get<0>(k));
@@ -168,48 +176,78 @@ namespace turtle::sc {
         }
         return {false, Vector2f(0, 0)};
     }
+
+    // distance from a point to a line segment
+    float dist_pt_line(const Vector2f& p1, const Vector2f& p2, const Vector2f a) {
+        const float x0 = a.x();
+        const float y0 = a.y();
+        const float x1 = p1.x();
+        const float y1 = p1.y();
+        const float x2 = p2.x();
+        const float y2 = p2.y();
+        const float dist = std::abs((x2 - x1) * (y1 - y0) - (x1 - x0) * (y2 - y1)) / (p2 - p1).norm();
+        return dist;
+    }
+
+    // struct to represent obstacles/occupied space within the maze
     struct obstacle {
         std::vector<std::tuple<Vector2f, Vector2f>> lines;
         std::vector<Vector2f> vertices;
         bounding_rect bound_rect = {0, 0, 0, 0};
+        bool closed;
+        int64_t id; // birthday paradox means we dont have to worry abt collisions until we reach abt 3e9 ids
+
 
         bool contains(const Vector2f& point) {
             if (!bound_rect.contains(point)) return false;
 
-            const Vector2f outside_pt(bound_rect.x_max+1, bound_rect.y_max+1);
+            if (closed) {
+                const Vector2f outside_pt(bound_rect.x_max+1, bound_rect.y_max+1);
 
-            int count = 0;
+                int count = 0;
 
-            std::vector<bool> corners(vertices.size());
-            for (auto& line : lines) {
-                auto [ints, int_pt] = intersects({outside_pt, point}, line);
-                if (ints) {
-                    bool counted = false;
+                std::vector<bool> corners(vertices.size());
+                for (auto& line : lines) {
+                    auto [ints, int_pt] = intersects({outside_pt, point}, line);
+                    if (ints) {
+                        bool counted = false;
 
-                    for (int i = 0; i < vertices.size(); ++i) {
-                        using std::abs;
-                        if (abs(int_pt.x() - vertices[i].x()) <= 0.00001 &&
-                            abs(int_pt.y() - vertices[i].y()) <= 0.00001) {
+                        for (int i = 0; i < vertices.size(); ++i) {
+                            using std::abs;
+                            if (abs(int_pt.x() - vertices[i].x()) <= 0.00001 &&
+                                abs(int_pt.y() - vertices[i].y()) <= 0.00001) {
 
-                            if (corners[i]) {
+                                if (corners[i]) {
+                                    counted = true;
+                                    continue;
+                                }
+
+
+                                corners[i] = true;
+                                count++;
                                 counted = true;
-                                continue;
+                                break;
                             }
-
-
-                            corners[i] = true;
-                            count++;
-                            counted = true;
-                            break;
                         }
+
+                        if (!counted) count++;
                     }
-
-                    if (!counted) count++;
                 }
+
+
+                return count % 2 == 1;
+            } else {
+                const float epsilon = 0.01;
+                for (auto& line : lines) {
+                    const Vector2f a = std::get<0>(line);
+                    const Vector2f b = std::get<1>(line);
+                    const float dist = dist_pt_line(a, b, point);
+                    if (dist < epsilon) {
+                        return true;
+                    }
+                }
+                return false;
             }
-
-
-            return count % 2 == 1;
         }
 
         obstacle(std::vector<Vector2f> vertices) : vertices(vertices) {
@@ -241,8 +279,11 @@ namespace turtle::sc {
                 bound_rect.enclose_point(vertices[std::get<1>(edge)]);
             }
         }
+
+        obstacle() {}
     };
 
+    // hash of a point in R2
     struct hash_vector2f {
         size_t operator()(const Vector2f v) const {
             float fa = v.x();
@@ -257,25 +298,34 @@ namespace turtle::sc {
     class planning_space {
         public:
             point_set sample_free(const int n);
+
+            bool is_free(const Vector2f& p);
+            bool is_free_space_allocated(const Vector2f& p);
+            std::tuple<bool, obstacle> is_obstacle(const Vector2f& p);
+
+            bool is_same_obstacle_fuzzy(const Vector2f& a, const Vector2f& b, const float epsilon);
+
             float cost(const Vector2f a, const Vector2f b) const;
             point_set near(const Vector2f b, const point_set& nodes, const float dist) const;
             std::optional<std::vector<Vector2f>> fast_marching_trees(const Vector2f& x_init, const Vector2f& x_goal, const int n, const float rn);
-            void register_free_space_constraint(std::function<bool(Vector2f)>);
 
             planning_space(const bounding_rect& br);
 
             std::vector<obstacle> obstacles;
+            std::vector<std::function<bool(Vector2f)>> free_space_allocations;
             bounding_rect bound_rect;
             halton_state x_state;
             halton_state y_state;
     };
 
+    // arclength data of a bezier spline
     struct arclength_data {
         float arclength;
         std::vector<VectorXf> segments;
         std::vector<VectorXf> positions;
     };
 
+    // chebyshev polynomial
     struct chebpoly {
         VectorXf coeffs;
         float xmin;
@@ -295,57 +345,30 @@ namespace turtle::sc {
     }
 
     inline Vector2f calc_tangent(const Vector2f& W_0, const Vector2f& W_1, const Vector2f& W_2) {
-        // std::cout << "calc_tangent call ------------------" << std::endl;
-        // std::cout << "W_0 " << W_0.x() << " " << W_0.y() << std::endl;
-        // std::cout << "W_1 " << W_1.x() << " " << W_1.y() << std::endl;
-        // std::cout << "W_2 " << W_2.x() << " " << W_2.y() << std::endl;
         const Vector2f u = W_0 - W_1;
         const Vector2f v = W_2 - W_1;
-        // std::cout << "u " << u.x() << " " << u.y() << std::endl;
-        // std::cout << "v " << v.x() << " " << v.y() << std::endl;
         float u_dot_v = u.dot(v);
         const float denom = pt_dist(u) * pt_dist(v);
         const float theta = std::acos((u_dot_v) / denom) / 2;
 
-        // const float offset = std::atan2(-u.y(), -u.x());
         const float offset = std::atan2(u.y(), u.x());
         const float test_offset = std::atan2(v.y(), v.x());
 
         int mult = 1;
         if (test_offset - offset < 0) mult = -1;
 
-        // std::cout << "theta " << (theta * 180 / 3.1415926535) << std::endl;
-        // std::cout << "offset " << (offset * 180 / 3.1415926535) << std::endl;
-
-        // std::cout << "offset " << offset << std::endl;
 
         Vector2f l90(std::sin(offset + (mult * theta)), -std::cos(offset + (mult * theta)));
         l90 = l90.normalized();
-        // Vector2f r90 = -l90;
-
-        // std::cout << "calc_tangent end ????????????" << std::endl;
         int mult2 = -1;
         if (pt_dist(W_1+l90, W_2) < pt_dist(W_1+(-l90), W_2)) {
-            // return tangent_magnitude(W_0, W_1, W_2) * l90;
             mult2 = 1;
         }
         return tangent_magnitude(W_0, W_1, W_2) * (mult2 * l90);
 
-        // // std::cout << (u_dot_v) / denom << std::endl;
-        // std::cout << "theta " << (180 * theta / 3.1415926535) << std::endl;
-
-        // return tangent_magnitude(W_0, W_1, W_2) * Vector2f(std::cos(theta), std::sin(theta));
-
-        // // return calc_start_tangent(W_1, W_2, theta);
-
     }
 
     inline Vector2f calc_start_tangent(const Vector2f& W_0, const Vector2f& W_1, const float theta) {
-        // Vector2f tmp(std::cos(theta), std::sin(theta));
-        // std::cout << "wtfff " << tmp.x() << " " << tmp.y() << std::endl;
-        // std::cout << tangent_magnitude(W_0, W_1, W_0) << std::endl;
-        // Vector2f tmp2 = tangent_magnitude(W_0, W_1, W_0) * Vector2f(std::cos(theta), std::sin(theta));
-        // std::cout << "wtfff2 " << tmp2.x() << " " << tmp2.y() << std::endl;
         return tangent_magnitude(W_0, W_1, W_0) * Vector2f(std::cos(theta), std::sin(theta));
     }
 
@@ -410,30 +433,112 @@ namespace turtle::sc {
     class planner {
         public:
             planning_space ps;
+            std::stack<Vector2f> goal_point_cache;
+            int64_t past_id;
 
-            Vector2f pick_next_goal_point() const;
+            Vector2f pick_next_goal_point(const Vector2f& start, const int n, const float search_radius);
             // void update_planning_space();
     };
 
-    Vector2f planner::pick_next_goal_point() const {
 
+    bool planning_space::is_same_obstacle_fuzzy(const Vector2f& a, const Vector2f& b, const float epsilon) {
+        for (auto&& obstacle : obstacles) {
+            bool a_tag = false;
+            bool b_tag = false;
+            for (auto && line : obstacle.lines) {
+                auto&& p1 = std::get<0>(line);
+                auto&& p2 = std::get<1>(line);
+                const float dist_a = dist_pt_line(p1, p2, a);
+                if (dist_a < epsilon) {
+                    a_tag = true;
+                }
+                const float dist_b = dist_pt_line(p1, p2, a);
+                if (dist_b < epsilon) {
+                    b_tag = true;
+                }
+            }
+            if (a_tag && b_tag) return true;
+        }
+        return false;
+    }
+
+    Vector2f planner::pick_next_goal_point(const Vector2f& start, const int n, const float search_radius) {
+        // const point_set free_pts = sample_free(n);
+
+        // trace circle around start
+        bool is_free_past = false;
+        const float epsilon = 0.001;
+        std::vector<Vector2f> test_pts;
+        for (std::size_t i = 0; i < n; i++) {
+            const float angle = 2 * std::numbers::pi * (i * 1/n);
+            Vector2f test(search_radius * std::cos(angle), search_radius * std::sin(angle));
+            bool isf = ps.is_free(test);
+            // Since our local area of known space will be circular, any change from free to non-free along the circle will have to be due to an obstacle
+            // TODO: fix condition in the loop below
+            for (std::size_t j = 0; j < n / 10; j++) {
+                Vector2f test_uk((search_radius + epsilon) * std::cos(angle), (search_radius + epsilon) * std::sin(angle));
+                bool is_uk = !ps.is_free_space_allocated(test_uk);
+                if (isf != is_free_past && i != 0 && is_uk) {
+                    test_pts.push_back(test);
+                }
+            }
+            // if (isf != is_free_past && i != 0) {
+            //     test_pts.push_back(test);
+            // }
+            is_free_past = isf;
+        }
+
+        if (test_pts.empty()) {
+            if (goal_point_cache.empty()) {
+                // failed
+            }
+            // pull point from cache
+            test_pts.push_back(goal_point_cache.top());
+            goal_point_cache.pop();
+        }
+
+        // grab a point and send rest to cache
+        const Vector2f next_point = test_pts.back();
+        // TODO: grab the point on the same obstacle
+        test_pts.pop_back();
+        return next_point;
+
+
+
+        // pick possible goal points and the use heuristic to select one
+        // for (auto& obstacle : ps.obstacles) {
+        //     // trace each obstacle to find points that border free space
+        //     for (auto& line : obstacle) {
+        //         const Vector2f a = std::get<0>(line);
+        //         const Vector2f b = std::get<1>(line);
+        //         const float dist = (b - a).norm();
+        //         const float n = 100; // TODO: think abt this
+
+        //     }
+        // }
     }
 
 
     bezier_spline::bezier_spline(const std::vector<std::vector<Vector2f>>& ctrl_pts, const Matrix<float, Dynamic, 2>& pts, const std::vector<VectorXf>& positions) : ctrl_pts(ctrl_pts), pts(pts), positions(positions) {}
 
+    // number of discretized points in the spline
+    // this is soley a property of how we discretize
     inline int bezier_spline::n_pts() const {
         return pts.rows();
     }
 
+    // number of bezier curves in the spline
     inline int bezier_spline::n_segments() const {
         return ctrl_pts.size();
     }
 
+    // degree of bezier curve is number of control points minus 1
     inline int bezier_spline::degree() const {
         return ctrl_pts[0].size()-1;
     }
 
+    // bezier curves are still the type bezier_spline within this codebase
+    // so we use this function to join curves into a full spline
     // it's ok that this is static as a new matrix would have to be allocated either way
     bezier_spline bezier_spline::join_splines(const std::vector<bezier_spline>& splines) {
         std::vector<std::vector<Vector2f>> ctrl_pts;
@@ -463,6 +568,10 @@ namespace turtle::sc {
         return bs;
     }
 
+    // shrinks a control point along the tanget in order to not collide with an obstacle
+    // this works as a property of the bezier curve is that the entire curve
+    // is contained in the polyhedra defined by its control points
+    // this is a conservative but fast method of making sure the curve does not collide with a given obstacle
     inline Vector2f bezier_spline::shrink_tangent(const Vector2f& T, const Vector2f& W, const float k, const planning_space& ps) {
         Vector2f ret_pt = k * T;
         // std::cout << "ret_pt " << ret_pt.x() << " " << ret_pt.y() << std::endl;
@@ -486,6 +595,7 @@ namespace turtle::sc {
         return ret_pt;
     }
 
+    // generates a bezier spline from a piecewise-linear path
     bezier_spline bezier_spline::from_path(const std::vector<Vector2f>& path, const planning_space& ps, float start_angle=NAN) {
         SC_ASSERT(path.size() >= 2, "Not enough points for a path");
 
@@ -577,6 +687,7 @@ namespace turtle::sc {
         return bezier_curve(ctrl_pts, mapped);
     }
 
+    // generated a bezier curve based on the paper
     bezier_spline bezier_spline::bezier_curve(const std::vector<Vector2f>& ctrl_pts, const VectorXf& positions) {
         SC_ASSERT(ctrl_pts.size() >= 2, "ctrl_pts must have at least 2 points");
         SC_ASSERT(positions.minCoeff() >= 0, "positions must be between [0, 1]");
@@ -1160,6 +1271,26 @@ namespace turtle::sc {
 
     planning_space::planning_space(const bounding_rect& br) : bound_rect(br) {}
 
+    std::tuple<bool, obstacle> planning_space::is_obstacle(const Vector2f& p) {
+        for (auto& obst : obstacles) {
+            if (obst.contains(p)) return {true, obst};
+        }
+        obstacle temp;
+        return {false, temp};
+    }
+
+    bool planning_space::is_free_space_allocated(const Vector2f& p) {
+        for (auto& free_space_allocation : free_space_allocations) {
+            if (free_space_allocation(p)) return true;
+        }
+        return false;
+    }
+
+    bool planning_space::is_free(const Vector2f& p) {
+        // is not inside an obstacle and is not unknown space
+        return !std::get<0>(is_obstacle(p)) && is_free_space_allocated(p);
+    }
+
     point_set planning_space::sample_free(const int n) {
         // technically this should be a set, but the halton sequence is guaranteed to not repeat
         // so we can avoid element checks for a set
@@ -1173,12 +1304,8 @@ namespace turtle::sc {
 
             for (int i = 0; i < x_test.size(); ++i) {
                 const Vector2f test((bound_rect.x_max-bound_rect.x_min)*(x_test[i])+bound_rect.x_min, (bound_rect.y_max-bound_rect.y_min)*(y_test[i])+bound_rect.y_min);
-
-                bool add = true;
-                for (auto& obstacle : obstacles) {
-                    if (obstacle.contains(test)) add = false;
-                }
-                if (add) pts.insert(test);
+                std::cout << "testing point " << test.x() << " " << test.y() << std::endl;
+                if (is_free(test)) pts.insert(test);
             }
         }
 
