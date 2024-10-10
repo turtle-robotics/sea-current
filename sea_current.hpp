@@ -470,7 +470,7 @@ namespace turtle::sc {
         const float epsilon = 0.001;
         std::vector<Vector2f> test_pts;
         for (std::size_t i = 0; i < n; i++) {
-            const float angle = 2 * std::numbers::pi * (i * 1/n);
+            const float angle = 2 * std::numbers::pi * (i * 1.0f/n);
             Vector2f test(search_radius * std::cos(angle), search_radius * std::sin(angle));
             bool isf = ps.is_free(test);
             // Since our local area of known space will be circular, any change from free to non-free along the circle will have to be due to an obstacle
