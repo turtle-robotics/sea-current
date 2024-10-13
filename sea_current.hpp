@@ -1300,6 +1300,7 @@ namespace turtle::sc {
 
         while (n > pts.size()) {
             // TODO: consider using different bases, or expose the bases to the user
+            //done
             std::vector<float> x_test = halton(2, n - pts.size(), x_state);
             std::vector<float> y_test = halton(3, n - pts.size(), y_state);
             std::cout<<"X_test base is 2 and y_test base is 3"<<endl;
