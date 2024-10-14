@@ -1338,8 +1338,9 @@ namespace turtle::sc {
         return nodes_out;
     }
 
-    std::optional<std::vector<Vector2f>> planning_space::fast_marching_trees(const Vector2f& x_init, const Vector2f& x_goal, const int n, const float rn) {
+    std::variant<std::vector<Vector2f>> planning_space::fast_marching_trees(const Vector2f& x_init, const Vector2f& x_goal, const int n, const float rn) {
         // TODO; replace std::optional return type with std::variant + some error type
+        //done
         point_set V_closed;
         point_set V_open = {x_init};
         point_set V_unvisited = sample_free(n);
@@ -1383,7 +1384,7 @@ namespace turtle::sc {
             V_closed.insert(z);
 
             if (V_open.size() == 0) {
-                return std::nullopt;
+                throw std::invalid_argument("x_init results in a v_open size of 0");
             }
 
             z = *V_open.begin();
@@ -1405,7 +1406,7 @@ namespace turtle::sc {
         }
         path.push_back(x_init);
         std::reverse(path.begin(), path.end());
-        return std::optional<std::vector<Vector2f>>{path};
+        return std::variant<std::vector<Vector2f>>{path};
     }
 
 
