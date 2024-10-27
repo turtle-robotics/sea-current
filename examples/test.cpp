@@ -77,6 +77,7 @@ class TestVLJV : public LinearJointVelocity {
 
 int main() {
 
+    std::cout << "did we make it here? 115" << std::endl;
     std::vector<Vector2f> ctrl_pts;
     std::vector<Vector2f> ctrl_pts2;
 
@@ -112,6 +113,7 @@ int main() {
         std::cout << "ctrl_pt: " << ctrl_pt.x() << " " << ctrl_pt.y() << std::endl;
     }
 
+    std::cout << "did we make it here? 115" << std::endl;
     auto start = std::chrono::high_resolution_clock::now();
     std::cout << "die?" << std::endl;
     bezier_spline bs = bezier_spline::bezier_curve(ctrl_pts, 0.0001);
@@ -191,6 +193,7 @@ int main() {
     Eigen::Vector<value_type, 1> acc_min{-40};
     Eigen::Vector<value_type, 1> acc_max{40};
 
+    std::cout << "did we make it here? 194" << std::endl;
     auto vel_lim = [](toppra::value_type time) {
         toppra::Vector lower{1};
         toppra::Vector upper{1};
@@ -243,6 +246,7 @@ int main() {
         // std::cout << x3[i] << " " << y3[i] << std::endl;
     }
 
+    std::cout << "did we make it here? 248" << std::endl;
     // plt::plot(x3, y3, "");
 
     start = std::chrono::high_resolution_clock::now();
@@ -252,15 +256,19 @@ int main() {
     planning_space space(br);
 
     obstacle ob({Vector2f(-0.5, 0), Vector2f(1, 0), Vector2f(1, 1), Vector2f(0, 1)});
-    obstacle ob2({Vector2f(0, -0.5), Vector2f(1, 0), Vector2f(1, 1), Vector2f(0, 1)});
-    obstacle ob3({Vector2f(-0.6, 0.148), Vector2f(-1, 0.148), Vector2f(-1, 0), Vector2f(-0.6, 0)});
     space.obstacles.push_back(ob);
+    obstacle ob2({Vector2f(0, -0.5), Vector2f(1, 0), Vector2f(1, 1), Vector2f(0, 1)});
     space.obstacles.push_back(ob2);
+    obstacle ob3({Vector2f(-0.6, 0.148), Vector2f(-1, 0.148), Vector2f(-1, 0), Vector2f(-0.6, 0)});
     space.obstacles.push_back(ob3);
 
+    std::cout << "did we make it here? 268" << std::endl;
+    std::function<bool(Vector2f)> lidar_test = [](Vector2f v) { return true; };
+    space.free_space_allocations.push_back(lidar_test);
     point_set pts_set = space.sample_free(2560);
     std::vector<Vector2f> pts(pts_set.begin(), pts_set.end());
 
+    std::cout << "did we make it here? 268" << std::endl;
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     std::cout << (duration.count() / 1000.0)<< std::endl;
@@ -269,7 +277,8 @@ int main() {
     //     std::cout << "pt: " << pt.x() << " " << pt.y() << std::endl;
     // }
 
-    std::cout << "c: " << ob.contains(Vector2f(0.5, 0.5)) << std::endl;
+    std::cout << "did we make it here? 272" << std::endl;
+    // std::cout << "c: " << ob.contains(Vector2f(0.5, 0.5)) << std::endl;
 
     std::vector<float> x4(pts.size());
     std::vector<float> y4(pts.size());
@@ -317,6 +326,7 @@ int main() {
         }
     }
 
+    std::cout << "did we make it here? 320" << std::endl;
     plt::plot(x4, y4, "o");
 
     plt::plot(x5, y5);

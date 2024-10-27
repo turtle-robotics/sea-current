@@ -316,6 +316,9 @@ namespace turtle::sc {
             bounding_rect bound_rect;
             halton_state x_state;
             halton_state y_state;
+
+
+
     };
 
     // arclength data of a bezier spline
@@ -468,18 +471,18 @@ namespace turtle::sc {
         // trace circle around start
         bool is_free_past = false;
         const float epsilon = 0.001;
-        std::vector<Vector2f> test_pts;
+        std::vector<std::pair<Vector2f, int>> test_pts;
         for (std::size_t i = 0; i < n; i++) {
-            const float angle = 2 * std::numbers::pi * (i * 1/n);
-            Vector2f test(search_radius * std::cos(angle), search_radius * std::sin(angle));
+            const float angle = 2 * std::numbers::pi * (i * 1.0f/n);
+            Vector2f test(search_radius * std::cos(angle) + start.x(), search_radius * std::sin(angle) + start.y());
             bool isf = ps.is_free(test);
             // Since our local area of known space will be circular, any change from free to non-free along the circle will have to be due to an obstacle
             // TODO: fix condition in the loop below
-            for (std::size_t j = 0; j < n / 10; j++) {
-                Vector2f test_uk((search_radius + epsilon) * std::cos(angle), (search_radius + epsilon) * std::sin(angle));
+            for (std::size_t j = 1; j < n / 10; j++) {
+                Vector2f test_uk((search_radius + j * epsilon) * std::cos(angle), (search_radius + j * epsilon) * std::sin(angle));
                 bool is_uk = !ps.is_free_space_allocated(test_uk);
                 if (isf != is_free_past && i != 0 && is_uk) {
-                    test_pts.push_back(test);
+                    test_pts.push_back({test, 1});
                 }
             }
             // if (isf != is_free_past && i != 0) {
@@ -498,7 +501,15 @@ namespace turtle::sc {
         }
 
         // grab a point and send rest to cache
-        const Vector2f next_point = test_pts.back();
+        auto [next_point, dir] = test_pts.back();
+        // shuffle along vector orthangonal to vector of current robot and next point
+        Vector2f diff = next_point - start;
+        const float angle = std::atan2(diff.y(), diff.x());
+        const float ortho_angle = (std::numbers::pi / 2) * dir + angle;
+
+
+
+
         // TODO: grab the point on the same obstacle
         test_pts.pop_back();
         return next_point;
@@ -687,7 +698,7 @@ namespace turtle::sc {
         return bezier_curve(ctrl_pts, mapped);
     }
 
-    // generated a bezier curve based on the paper
+    // generates a bezier curve based on the paper "Efficient Computation of Bezier curves from their Bernstein-Fourier represetation"
     bezier_spline bezier_spline::bezier_curve(const std::vector<Vector2f>& ctrl_pts, const VectorXf& positions) {
         SC_ASSERT(ctrl_pts.size() >= 2, "ctrl_pts must have at least 2 points");
         SC_ASSERT(positions.minCoeff() >= 0, "positions must be between [0, 1]");
