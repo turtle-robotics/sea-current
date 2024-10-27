@@ -15,7 +15,7 @@
 #include <optional>
 #include <string>
 #include <stack>
-
+#include <variant>
 #include <Eigen/Dense>
 #include <unsupported/Eigen/FFT>
 
@@ -307,7 +307,7 @@ namespace turtle::sc {
 
             float cost(const Vector2f a, const Vector2f b) const;
             point_set near(const Vector2f b, const point_set& nodes, const float dist) const;
-            std::optional<std::vector<Vector2f>> fast_marching_trees(const Vector2f& x_init, const Vector2f& x_goal, const int n, const float rn);
+            std::variant<std::vector<Vector2f>> fast_marching_trees(const Vector2f& x_init, const Vector2f& x_goal, const int n, const float rn);
 
             planning_space(const bounding_rect& br);
 
@@ -1264,6 +1264,7 @@ namespace turtle::sc {
         }
 
         // TODO: there is probably a better way to copy this data
+
         for (int i = 0; i < path_pos.size(); ++i) {
             for (int j = 0; j < dof; ++j) {
                 pos[j](i) = path_pos[i](j);
@@ -1310,9 +1311,10 @@ namespace turtle::sc {
 
         while (n > pts.size()) {
             // TODO: consider using different bases, or expose the bases to the user
+            //done
             std::vector<float> x_test = halton(2, n - pts.size(), x_state);
             std::vector<float> y_test = halton(3, n - pts.size(), y_state);
-
+            std::cout<<"X_test base is 2 and y_test base is 3"<<std::endl;
             for (int i = 0; i < x_test.size(); ++i) {
                 const Vector2f test((bound_rect.x_max-bound_rect.x_min)*(x_test[i])+bound_rect.x_min, (bound_rect.y_max-bound_rect.y_min)*(y_test[i])+bound_rect.y_min);
                 std::cout << "testing point " << test.x() << " " << test.y() << std::endl;
@@ -1347,8 +1349,9 @@ namespace turtle::sc {
         return nodes_out;
     }
 
-    std::optional<std::vector<Vector2f>> planning_space::fast_marching_trees(const Vector2f& x_init, const Vector2f& x_goal, const int n, const float rn) {
+    std::variant<std::vector<Vector2f>> planning_space::fast_marching_trees(const Vector2f& x_init, const Vector2f& x_goal, const int n, const float rn) {
         // TODO; replace std::optional return type with std::variant + some error type
+        //done
         point_set V_closed;
         point_set V_open = {x_init};
         point_set V_unvisited = sample_free(n);
@@ -1392,7 +1395,7 @@ namespace turtle::sc {
             V_closed.insert(z);
 
             if (V_open.size() == 0) {
-                return std::nullopt;
+                throw std::invalid_argument("x_init results in a v_open size of 0");
             }
 
             z = *V_open.begin();
@@ -1414,7 +1417,7 @@ namespace turtle::sc {
         }
         path.push_back(x_init);
         std::reverse(path.begin(), path.end());
-        return std::optional<std::vector<Vector2f>>{path};
+        return std::variant<std::vector<Vector2f>>{path};
     }
 
 
