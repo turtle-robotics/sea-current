@@ -430,14 +430,18 @@ namespace turtle::sc {
             }
     };
 
-    class planner {
+    class  planner{
         public:
             planning_space ps;
             std::stack<Vector2f> goal_point_cache;
             int64_t past_id;
 
             Vector2f pick_next_goal_point(const Vector2f& start, const int n, const float search_radius);
+            //cd 
+            planner(bounding_rect br): ps(br){
+            }
             // void update_planning_space();
+
     };
 
 
