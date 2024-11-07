@@ -436,7 +436,7 @@ namespace turtle::sc {
             std::stack<Vector2f> goal_point_cache;
             int64_t past_id;
 
-            Vector2f pick_next_goal_point(const Vector2f& start, const int n, const float search_radius);
+            std::variant<Vector2f> pick_next_goal_point(const Vector2f& start, const int n, const float search_radius);
             //cd 
             planner(bounding_rect br): ps(br){
             }
@@ -466,7 +466,7 @@ namespace turtle::sc {
         return false;
     }
 
-    Vector2f planner::pick_next_goal_point(const Vector2f& start, const int n, const float search_radius) {
+    std::variant<Vector2f> planner::pick_next_goal_point(const Vector2f& start, const int n, const float search_radius) {
         // const point_set free_pts = sample_free(n);
 
         // trace circle around start
@@ -478,7 +478,7 @@ namespace turtle::sc {
             Vector2f test(search_radius * std::cos(angle), search_radius * std::sin(angle));
             bool isf = ps.is_free(test);
             // Since our local area of known space will be circular, any change from free to non-free along the circle will have to be due to an obstacle
-            // TODO: fix condition in the loop below
+            // : fix condition in the loop below
             for (std::size_t j = 0; j < n / 10; j++) {
                 Vector2f test_uk((search_radius + epsilon) * std::cos(angle), (search_radius + epsilon) * std::sin(angle));
                 bool is_uk = !ps.is_free_space_allocated(test_uk);
@@ -495,6 +495,7 @@ namespace turtle::sc {
         if (test_pts.empty()) {
             if (goal_point_cache.empty()) {
                 // failed
+                return std::variant<Vector2f>{};
             }
             // pull point from cache
             test_pts.push_back(goal_point_cache.top());
@@ -505,8 +506,7 @@ namespace turtle::sc {
         const Vector2f next_point = test_pts.back();
         // TODO: grab the point on the same obstacle
         test_pts.pop_back();
-        return next_point;
-
+        return std::variant<Vector2f>{next_point};
 
 
         // pick possible goal points and the use heuristic to select one
