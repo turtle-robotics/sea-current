@@ -73,5 +73,10 @@ if (BUILD_EXAMPLES)
 endif ()
 
 install(FILES
+  "${PROJECT_SOURCE_DIR}/utilities.hpp"
+  "${PROJECT_SOURCE_DIR}/bezier.hpp"
+  "${PROJECT_SOURCE_DIR}/planning_space.hpp"
+  "${PROJECT_SOURCE_DIR}/planner.hpp"
+  "${PROJECT_SOURCE_DIR}/LinearJointVelocityVarying.hpp"
   "${PROJECT_SOURCE_DIR}/sea_current.hpp"
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
