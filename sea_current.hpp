@@ -1,5 +1,4 @@
 #pragma once
-
 #include <iostream>
 #include <vector>
 #include <cmath>
@@ -18,7 +17,6 @@
 #include <variant>
 #include <Eigen/Dense>
 #include <unsupported/Eigen/FFT>
-
 #include <toppra/toppra.hpp>
 #include <toppra/geometric_path.hpp>
 #include <toppra/geometric_path/piecewise_poly_path.hpp>
@@ -27,10 +25,8 @@
 #include <toppra/algorithm/toppra.hpp>
 #include <toppra/parametrizer.hpp>
 #include <toppra/parametrizer/spline.hpp>
-
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
-
 #ifdef DEBUG
 #define SC_ASSERT(cnd, msg)                                                           \
     do {                                                                              \
@@ -51,26 +47,20 @@ using json = nlohmann::json;
 #define SC_ASSERT(cnd, msg)
 #endif
 
-
 namespace turtle::sc {
-
     using namespace Eigen;
-
     using namespace std::complex_literals;
-
     struct bounding_rect {
         float x_max;
         float x_min;
         float y_max;
         float y_min;
-
         inline bool contains(const Vector2f& point) {
             return point.x() <= x_max &&
                    point.x() >= x_min &&
                    point.y() <= y_max &&
                    point.y() >= y_min;
         }
-
         // grows the bounding rect to enclose a point
         inline void enclose_point(const Vector2f& pt) {
             if (pt.x() > x_max) x_max = pt.x();
@@ -86,7 +76,6 @@ namespace turtle::sc {
     inline float pt_dist(const Vector2f& u, const Vector2f& v={0,0}) {
         return std::sqrt(std::pow(v.x() - u.x(), 2) + std::pow(v.y() - u.y(), 2));
     }
-
     // halton sequence is a pseudo random sequence that i use to sample a subset of R2
     // this struct stores the current state within the sequence, theres two numbers instead of one for seed/state
     struct halton_state {
@@ -99,17 +88,13 @@ namespace turtle::sc {
     // function that advances state
     std::vector<float> halton(const int b, const int n, halton_state& state) {
         std::vector<float> nums(n);
-
         int f = 0;
         int i = 1;
-
         if (state.i != 0 && state.f != 0) {
             i = state.i;
             f = state.f;
         }
-
         for (int j = 0; j < n; ++j) {
-
             const int x = i - f;
             if (x == 1) {
                 f = 1;
@@ -121,55 +106,43 @@ namespace turtle::sc {
                 }
                 f = (b + 1) * y - x;
             }
-
             nums[j] = static_cast<float>(f) / i;
         }
-
         state.f = f;
         state.i = i;
-
         return nums;
     }
-
-
-
     // cross product of vectors in R2
     inline float cross2d(Vector2f u, Vector2f v) {
         return u.x()*v.y() - u.y()*v.x();
     }
-
     // checks if 2 vectors intersect and returns the point where they do
     std::tuple<bool, Vector2f> intersects(std::tuple<Vector2f, Vector2f> l, std::tuple<Vector2f, Vector2f> k) {
         const float a = cross2d(std::get<0>(k)-std::get<0>(l), std::get<1>(l)-std::get<0>(l));
         const float b = cross2d(std::get<1>(l)-std::get<0>(l), std::get<1>(k)-std::get<0>(k));
-
         if (a == 0 && b == 0) {
             // float ax = std::get<0>(l).x();
             // float bx = std::get<1>(l).x();
             // float cx = std::get<0>(k).x();
             // float dx = std::get<1>(k).x();
-
             // using std::max;
             // using std::min;
-
             // return (max(ax, bx) >= min(cx, dx) && min(ax, bx) <= min(cx, dx))
             //     || (max(cx, dx) >= min(ax, bx) && min(cx, dx) <= min(ax, bx))
             //     || (min(ax, bx) <= max(cx, dx) && max(ax, bx) >= max(cx, dx))
             //     || (min(cx, dx) <= max(ax, bx) && max(cx, dx) >= max(ax, bx));
-
             // TODO: consider a different way of handling colinear segments
+                return {false, Vector2f(0, 0)};
+            } 
+        else if (b == 0 && a != 0) { 
             return {false, Vector2f(0, 0)};
-        } else if (b == 0 && a != 0) {
-            return {false, Vector2f(0, 0)};
-        } else if (b != 0) {
+        }
+        else if (b != 0) {
             const float u = a / b;
-
             const float c = cross2d(std::get<0>(k)-std::get<0>(l), std::get<1>(k)-std::get<0>(k));
             // float d = cross2d(std::get<1>(l)-std::get<0>(l), std::get<1>(k)-std::get<0>(k));
             const float d = b;
-
             const float t = c / d;
-
             if (0 <= u && u <= 1 && 0 <= t && t <= 1) {
                 return {true, t*(std::get<1>(l)-std::get<0>(l))+std::get<0>(l)};
             }
@@ -196,45 +169,33 @@ namespace turtle::sc {
         bounding_rect bound_rect = {0, 0, 0, 0};
         bool closed;
         int64_t id; // birthday paradox means we dont have to worry abt collisions until we reach abt 3e9 ids
-
-
         bool contains(const Vector2f& point) {
             if (!bound_rect.contains(point)) return false;
-
             if (closed) {
                 const Vector2f outside_pt(bound_rect.x_max+1, bound_rect.y_max+1);
-
                 int count = 0;
-
                 std::vector<bool> corners(vertices.size());
                 for (auto& line : lines) {
                     auto [ints, int_pt] = intersects({outside_pt, point}, line);
                     if (ints) {
                         bool counted = false;
-
                         for (int i = 0; i < vertices.size(); ++i) {
                             using std::abs;
                             if (abs(int_pt.x() - vertices[i].x()) <= 0.00001 &&
                                 abs(int_pt.y() - vertices[i].y()) <= 0.00001) {
-
                                 if (corners[i]) {
                                     counted = true;
                                     continue;
                                 }
-
-
                                 corners[i] = true;
                                 count++;
                                 counted = true;
                                 break;
                             }
                         }
-
                         if (!counted) count++;
                     }
                 }
-
-
                 return count % 2 == 1;
             } else {
                 const float epsilon = 0.01;
@@ -252,16 +213,12 @@ namespace turtle::sc {
 
         obstacle(std::vector<Vector2f> vertices) : vertices(vertices) {
             bound_rect = {vertices[0].x(), vertices[0].x(), vertices[0].y(), vertices[0].y()};
-
             if (vertices.size() % 2 == 0) {
                 vertices.push_back(vertices[0]);
             }
-
             lines.resize(vertices.size()-1);
-
             for (int i = 0; i < vertices.size() - 1; ++i) {
                 lines[i] = {vertices[i], vertices[i+1]};
-
                 bound_rect.enclose_point(vertices[i]);
             }
         }
@@ -272,14 +229,11 @@ namespace turtle::sc {
             for (const auto& edge : edges) {
                 SC_ASSERT(std::get<0>(edge) < vertices.size(), "edge must reference indices within the vertex list");
                 SC_ASSERT(std::get<1>(edge) < vertices.size(), "edge must reference indices within the vertex list");
-
                 lines.push_back({vertices[std::get<0>(edge)], vertices[std::get<1>(edge)]});
-
                 bound_rect.enclose_point(vertices[std::get<0>(edge)]);
                 bound_rect.enclose_point(vertices[std::get<1>(edge)]);
             }
         }
-
         obstacle() {}
     };
 
@@ -298,27 +252,19 @@ namespace turtle::sc {
     class planning_space {
         public:
             point_set sample_free(const int n);
-
             bool is_free(const Vector2f& p);
             bool is_free_space_allocated(const Vector2f& p);
             std::tuple<bool, obstacle> is_obstacle(const Vector2f& p);
-
             bool is_same_obstacle_fuzzy(const Vector2f& a, const Vector2f& b, const float epsilon);
-
             float cost(const Vector2f a, const Vector2f b) const;
             point_set near(const Vector2f b, const point_set& nodes, const float dist) const;
             std::variant<std::vector<Vector2f>> fast_marching_trees(const Vector2f& x_init, const Vector2f& x_goal, const int n, const float rn);
-
             planning_space(const bounding_rect& br);
-
             std::vector<obstacle> obstacles;
             std::vector<std::function<bool(Vector2f)>> free_space_allocations;
             bounding_rect bound_rect;
             halton_state x_state;
             halton_state y_state;
-
-
-
     };
 
     // arclength data of a bezier spline
@@ -333,34 +279,25 @@ namespace turtle::sc {
         VectorXf coeffs;
         float xmin;
         float xmax;
-
         chebpoly(VectorXf coeffs, const float xmin, const float xmax) : coeffs(coeffs), xmin(xmin), xmax(xmax) {}
     };
 
     chebpoly chebfit(const VectorXf& x, const VectorXf& y, const int degree);
     VectorXf chebeval(const VectorXf& x, const chebpoly& b, const int degree);
-
     inline Vector2f calc_start_tangent(const Vector2f& W_0, const Vector2f& W_1, const float theta);
-
-
     inline float tangent_magnitude(const Vector2f& W_0, const Vector2f& W_1, const Vector2f& W_2) {
         return 0.5 * std::min(pt_dist(W_0, W_1), pt_dist(W_1, W_2));
     }
-
     inline Vector2f calc_tangent(const Vector2f& W_0, const Vector2f& W_1, const Vector2f& W_2) {
         const Vector2f u = W_0 - W_1;
         const Vector2f v = W_2 - W_1;
         float u_dot_v = u.dot(v);
         const float denom = pt_dist(u) * pt_dist(v);
         const float theta = std::acos((u_dot_v) / denom) / 2;
-
         const float offset = std::atan2(u.y(), u.x());
         const float test_offset = std::atan2(v.y(), v.x());
-
         int mult = 1;
         if (test_offset - offset < 0) mult = -1;
-
-
         Vector2f l90(std::sin(offset + (mult * theta)), -std::cos(offset + (mult * theta)));
         l90 = l90.normalized();
         int mult2 = -1;
@@ -368,23 +305,18 @@ namespace turtle::sc {
             mult2 = 1;
         }
         return tangent_magnitude(W_0, W_1, W_2) * (mult2 * l90);
-
     }
-
     inline Vector2f calc_start_tangent(const Vector2f& W_0, const Vector2f& W_1, const float theta) {
         return tangent_magnitude(W_0, W_1, W_0) * Vector2f(std::cos(theta), std::sin(theta));
     }
-
     inline Vector2f calc_end_tangent(const Vector2f& W_1, const Vector2f W_2) {
         return tangent_magnitude(W_1, W_2, W_1) * (W_2 - W_1).normalized();
     }
-
     struct velocity_profile {
         std::vector<VectorXf> pos;
         std::vector<VectorXf> vel;
         std::vector<VectorXf> acc;
         toppra::Vector time;
-
         velocity_profile(std::vector<VectorXf> pos, std::vector<VectorXf> vel, std::vector<VectorXf> acc, toppra::Vector time) : pos(pos), vel(vel), acc(acc), time(time) {}
     };
 
@@ -394,36 +326,27 @@ namespace turtle::sc {
             Matrix<float, Dynamic, 2> pts;
             std::vector<VectorXf> positions; // for curvature/hodograph
             std::vector<Matrix<std::complex<float>, Dynamic, 2>> Q_cache;
-
             bezier_spline() = default;
             bezier_spline(const std::vector<std::vector<Vector2f>>& ctrl_pts, const Matrix<float, Dynamic, 2>& pts, const std::vector<VectorXf>& positions);
             bezier_spline(const std::vector<std::vector<Vector2f>>& ctrl_pts, const std::vector<VectorXf>& positions); // uniform positions for each curve
-
             static bezier_spline join_splines(const std::vector<bezier_spline>& splines);
-
             static Vector2f shrink_tangent(const Vector2f& T, const Vector2f& W, const float k, const planning_space& ps);
             static bezier_spline from_path(const std::vector<Vector2f>& path, const planning_space& ps, float start_angle);
-
             static bezier_spline bezier_curve(const std::vector<Vector2f>& ctrl_pts, const std::vector<float>& positions);
             static bezier_spline bezier_curve(const std::vector<Vector2f>& ctrl_pts, const VectorXf& positions);
             static bezier_spline bezier_curve(const std::vector<Vector2f>& ctrl_pts, const VectorXf& positions, Matrix<std::complex<float>, Dynamic, 2> Q);
             static bezier_spline bezier_curve(std::vector<Vector2f>& ctrl_pts, float precision);
-
             inline int n_pts() const;
             inline int n_segments() const;
             inline int degree() const;
-
             arclength_data arclength(const float precision) const;
             std::vector<float> curvature() const;
             bezier_spline hodograph() const;
             std::vector<float> angular_velocity(const velocity_profile& vel_prof) const;
             std::vector<float> angular_velocity2(const velocity_profile& vel_prof) const;
-
             bezier_spline resample(VectorXf& profile_pos, arclength_data ad, bool nudge_positions) const;
-
             // helper function for bezier_curve
             static inline std::vector<std::complex<float>> omega_table(int degree);
-
         private:
             template <typename T, typename Y>
             static inline T coerce(const T& num, const Y& low, const Y& high) {
@@ -438,11 +361,9 @@ namespace turtle::sc {
             planning_space ps;
             std::stack<Vector2f> goal_point_cache;
             int64_t past_id;
-
             Vector2f pick_next_goal_point(const Vector2f& start, const int n, const float search_radius);
             // void update_planning_space();
     };
-
 
     bool planning_space::is_same_obstacle_fuzzy(const Vector2f& a, const Vector2f& b, const float epsilon) {
         for (auto&& obstacle : obstacles) {
@@ -467,7 +388,6 @@ namespace turtle::sc {
 
     Vector2f planner::pick_next_goal_point(const Vector2f& start, const int n, const float search_radius) {
         // const point_set free_pts = sample_free(n);
-
         // trace circle around start
         bool is_free_past = false;
         const float epsilon = 0.001;
@@ -499,23 +419,15 @@ namespace turtle::sc {
             test_pts.push_back(goal_point_cache.top());
             goal_point_cache.pop();
         }
-
         // grab a point and send rest to cache
         auto [next_point, dir] = test_pts.back();
         // shuffle along vector orthangonal to vector of current robot and next point
         Vector2f diff = next_point - start;
         const float angle = std::atan2(diff.y(), diff.x());
         const float ortho_angle = (std::numbers::pi / 2) * dir + angle;
-
-
-
-
         // TODO: grab the point on the same obstacle
         test_pts.pop_back();
         return next_point;
-
-
-
         // pick possible goal points and the use heuristic to select one
         // for (auto& obstacle : ps.obstacles) {
         //     // trace each obstacle to find points that border free space
@@ -524,30 +436,23 @@ namespace turtle::sc {
         //         const Vector2f b = std::get<1>(line);
         //         const float dist = (b - a).norm();
         //         const float n = 100; // TODO: think abt this
-
         //     }
         // }
     }
-
-
     bezier_spline::bezier_spline(const std::vector<std::vector<Vector2f>>& ctrl_pts, const Matrix<float, Dynamic, 2>& pts, const std::vector<VectorXf>& positions) : ctrl_pts(ctrl_pts), pts(pts), positions(positions) {}
-
     // number of discretized points in the spline
     // this is soley a property of how we discretize
     inline int bezier_spline::n_pts() const {
         return pts.rows();
     }
-
     // number of bezier curves in the spline
     inline int bezier_spline::n_segments() const {
         return ctrl_pts.size();
     }
-
     // degree of bezier curve is number of control points minus 1
     inline int bezier_spline::degree() const {
         return ctrl_pts[0].size()-1;
     }
-
     // bezier curves are still the type bezier_spline within this codebase
     // so we use this function to join curves into a full spline
     // it's ok that this is static as a new matrix would have to be allocated either way
@@ -555,7 +460,6 @@ namespace turtle::sc {
         std::vector<std::vector<Vector2f>> ctrl_pts;
         std::vector<VectorXf> positions;
         std::vector<Matrix<std::complex<float>, Dynamic, 2>> Qs;
-
         int n_pts = 0;
         for (bezier_spline spline : splines) {
             n_pts += spline.n_pts();
@@ -565,20 +469,16 @@ namespace turtle::sc {
                 Qs.push_back(spline.Q_cache[i]);
             }
         }
-
         Matrix<float, Dynamic, 2> joined_pts = Matrix<float, Dynamic, 2>::Zero(n_pts, 2);
-
         int n = 0;
         for (bezier_spline spline : splines) {
             joined_pts.block(n, 0, spline.n_pts(), 2) = spline.pts;
             n += spline.n_pts();
         }
-
         bezier_spline bs = bezier_spline(ctrl_pts, joined_pts, positions);
         bs.Q_cache = Qs;
         return bs;
     }
-
     // shrinks a control point along the tanget in order to not collide with an obstacle
     // this works as a property of the bezier curve is that the entire curve
     // is contained in the polyhedra defined by its control points
@@ -602,79 +502,62 @@ namespace turtle::sc {
                 // std::cout << "ret_pt " << ret_pt.x() << " " << ret_pt.y() << std::endl;
             }
         }
-
         return ret_pt;
     }
 
     // generates a bezier spline from a piecewise-linear path
     bezier_spline bezier_spline::from_path(const std::vector<Vector2f>& path, const planning_space& ps, float start_angle=NAN) {
         SC_ASSERT(path.size() >= 2, "Not enough points for a path");
-
         // std::vector<bezier_spline> parts;
         std::vector<Vector2f> tangents;
         tangents.reserve(path.size());
-
         if (std::isnan(start_angle)) {
             const Vector2f tmp_diff = path[1] - path[0];
             start_angle = std::atan2(tmp_diff.y(), tmp_diff.x());
             // std::cout << "start angle " << (start_angle * 180 / 3.1415926) << std::endl;
         }
-
         constexpr float k = 1;
-
         Vector2f T_0 = calc_start_tangent(path[0], path[1], start_angle);
         T_0 = shrink_tangent(T_0, path[0], k, ps);
         // std::cout << "T_0 " << T_0.x() << " " << T_0.y() << std::endl;
         tangents.push_back(T_0);
-
         Vector2f T_e = calc_end_tangent(path[path.size() - 2], path[path.size() - 1]);
         T_e = shrink_tangent(T_e, path[path.size() - 1], k, ps);
         // std::cout << "T_e " << T_e.x() << " " << T_e.y() << std::endl;
         for (std::size_t i = 1; i < path.size() - 1; ++i) {
             // std::vector<Vector2f> ctrl_pts;
             // std::vector<Vector2f> ctrl_pts2;
-
             const Vector2f W_0 = path[i-1];
             const Vector2f W_1 = path[i];
             const Vector2f W_2 = path[i+1];
-
             // const Vector2f T_0 = calc_start_tangent(W_0, W_1, start_angle);
             Vector2f T_1 = calc_tangent(W_0, W_1, W_2);
             // std::cout << "T_1 " << T_1.x() << " " << T_1.y() << std::endl;
             // const Vector2f T_2 = calc_end_tangent(W_1, W_2);
-
-
             // T_0 = shrink_tangent(T_0, W_0, k, ps);
             T_1 = shrink_tangent(T_1, W_1, k, ps);
             tangents.push_back(T_1);
             // T_2 = shrink_tangent(T_2, W_2, k, ps);
-
-
             // ctrl_pts.push_back(W_0);
             // ctrl_pts.push_back(W_0 + T_0);
             // ctrl_pts.push_back(W_1 - T_1);
             // ctrl_pts.push_back(W_1);
-
             // ctrl_pts2.push_back(W_1);
             // ctrl_pts2.push_back(W_1 + T_1);
             // ctrl_pts2.push_back(W_2 - T_2);
             // ctrl_pts2.push_back(W_2);
-
             // bezier_spline bs = bezier_spline::bezier_curve(ctrl_pts, 0.0001);
             // bezier_spline bs2 = bezier_spline::bezier_curve(ctrl_pts2, 0.0001);
             // parts.push_back(bs);
             // parts.push_back(bs2);
         }
         tangents.push_back(T_e);
-
         std::vector<bezier_spline> parts;
         parts.reserve(path.size());
         for (std::size_t i = 0; i < path.size() - 1; ++i) {
             const Vector2f W_0 = path[i];
             const Vector2f W_1 = path[i+1];
-
             std::vector<Vector2f> ctrl_pts;
-
             ctrl_pts.push_back(W_0);
             ctrl_pts.push_back(W_0 + tangents[i]);
             ctrl_pts.push_back(W_1 - tangents[i+1]);
@@ -692,58 +575,41 @@ namespace turtle::sc {
         }
         return join_splines(parts);
     }
-
     inline bezier_spline bezier_spline::bezier_curve(const std::vector<Vector2f>& ctrl_pts, const std::vector<float>& positions) {
         const VectorXf mapped = VectorXf::Map(&positions[0], positions.size());
         return bezier_curve(ctrl_pts, mapped);
     }
-
     // generates a bezier curve based on the paper "Efficient Computation of Bezier curves from their Bernstein-Fourier represetation"
     bezier_spline bezier_spline::bezier_curve(const std::vector<Vector2f>& ctrl_pts, const VectorXf& positions) {
         SC_ASSERT(ctrl_pts.size() >= 2, "ctrl_pts must have at least 2 points");
         SC_ASSERT(positions.minCoeff() >= 0, "positions must be between [0, 1]");
         SC_ASSERT(positions.minCoeff() <= 1, "positions must be between [0, 1]");
-
         const int degree = ctrl_pts.size() - 1;
-
-
         // TODO: figure out if we can avoid constructing a new FFT object
         FFT<float> fft;
-
         Matrix<std::complex<float>, Dynamic, 2> U = Matrix<float, Dynamic, 2>::Zero(ctrl_pts.size(), 2);
-
         for (std::size_t i = 0; i <= degree; ++i) {
             U(i, 0) = ctrl_pts[i].x();
             U(i, 1) = ctrl_pts[i].y();
         }
-
         Matrix<std::complex<float>, Dynamic, 2> Q = Matrix<float, Dynamic, 2>::Zero(ctrl_pts.size(), 2);
-
         Eigen::VectorXcf tmp_fft(ctrl_pts.size());
         fft.inv(tmp_fft, U.col(0));
         Q.col(0) = tmp_fft;
-
         fft.inv(tmp_fft, U.col(1));
         Q.col(1) = tmp_fft;
-
         return bezier_curve(ctrl_pts, positions, Q);
     }
-
     bezier_spline bezier_spline::bezier_curve(const std::vector<Vector2f>& ctrl_pts, const VectorXf& positions, Matrix<std::complex<float>, Dynamic, 2> Q) {
         SC_ASSERT(ctrl_pts.size() >= 2, "ctrl_pts must have at least 2 points");
         SC_ASSERT(positions.minCoeff() >= 0, "positions must be between [0, 1]");
         SC_ASSERT(positions.minCoeff() <= 1, "positions must be between [0, 1]");
-
         const int degree = ctrl_pts.size() - 1;
-
         Matrix<float, Dynamic, 2> B;
         B.setZero(positions.rows(), 2);
-
         const std::vector<std::complex<float>> omegas = bezier_spline::omega_table(degree);
-
         // TODO: apply the optimizations described in section 3 of
         // "Efficient computation of Bezier curves from their Bernstein-Fourier representation"
-
         for (int i = 0; i < positions.rows(); ++i) {
             const float s = positions(i);
             for (int k = 0; k <= degree; ++k) {
@@ -752,7 +618,6 @@ namespace turtle::sc {
                 B(i, 1) += (Q(k, 1) * tmp).real();
             }
         }
-
         bezier_spline bs = bezier_spline({ctrl_pts}, B, {positions});
         bs.Q_cache = {Q};
         return bs;
@@ -760,19 +625,15 @@ namespace turtle::sc {
 
     bezier_spline bezier_spline::bezier_curve(std::vector<Vector2f>& ctrl_pts, const float precision) {
         SC_ASSERT(precision < 1 && precision > 0, "spline percision must be in (0, 1)");
-
         const int n = static_cast<int>(std::round(1.0f / precision));
-
         SC_ASSERT(std::abs(n - (1.0f / precision)) < 0.0001,
                     "1/percision must be (close) to an integer, for arbitrary position values use the other bezier_curve method");
-
         std::vector<float> positions(n+1);
         for (std::size_t i = 0; i <= n; ++i) {
             positions[i] = std::max(0.0f, std::min(i * precision, 1.0f));
         }
         return bezier_curve(ctrl_pts, positions);
     }
-
 
     // std::tuple<float, std::vector<std::vector<float>>> bezier_spline::arclength(const float precision=0.01) const {
     arclength_data bezier_spline::arclength(const float precision=0.01) const {
@@ -845,42 +706,33 @@ namespace turtle::sc {
             0.9972638618494815635449811286650407271385376637294611593011185457862359083917418520130456693085426416474280482200936551645510686196373231416035137741332968299789863385253514914078766236061488136738023162574655835389902337937054326098485227311719825229066712510246574949376367552421728646398};
 
         static_assert(weights.size() == abscissa.size());
-
         float total_arclen = 0;
         std::vector<VectorXf> arclens(n_segments());
         std::vector<VectorXf> arclen_positions(n_segments());
         for (int s = 0; s < n_segments(); ++s) {
             SC_ASSERT(precision < 1 && precision > 0, "spline percision must be in (0, 1)");
-
             const int n = static_cast<int>(std::round(1.0f / precision));
-
             SC_ASSERT(std::abs(n - (1.0f / precision)) < 0.0001,
-                        "1/percision must be (close) to an integer, for arbitrary position values use the other bezier_curve method");
-            
+                        "1/percision must be (close) to an integer, for arbitrary position values use the other bezier_curve method");      
             std::vector<float> pos(n+1);
             for (std::size_t i = 0; i <= n; ++i) {
                 pos[i] = std::min(i * precision, 1.0f);
             }
-
             VectorXf deriv_pos = VectorXf::Zero(weights.size() * (pos.size()-1));
             for (int k = 0; k < pos.size()-1; ++k) {
                 const float b = pos[k+1];
                 const float a = pos[k];
-
                 std::vector<float> ab_pos(weights.size());
                 for (int i = 0; i < weights.size(); ++i) {
                     deriv_pos((k*weights.size())+i) = ((b-a)/2)*abscissa[i] + ((b+a)/2);
                 }
             }
-
             bezier_spline deriv = (bezier_spline({ctrl_pts[s]}, Matrix<float, Dynamic, 2>(), {deriv_pos})).hodograph();
-
             VectorXf arclen_seg = VectorXf::Zero(pos.size());
             VectorXf arclen_seg_pos = VectorXf::Zero(pos.size());
             for (int k = 0; k < pos.size()-1; ++k) {
                 const float b = pos[k+1];
                 const float a = pos[k];
-
                 for (int i = 0; i < weights.size(); ++i) {
                     const int ind = (k*weights.size())+i;
                     arclen_seg(k+1) += weights[i] * std::sqrt((deriv.pts(ind, 0) * deriv.pts(ind, 0)) + (deriv.pts(ind, 1) * deriv.pts(ind, 1)));
@@ -889,7 +741,6 @@ namespace turtle::sc {
                 arclen_seg_pos[k+1] = b;
                 total_arclen += arclen_seg[k+1];
             }
-
             float sum = 0;
             for (float& arc : arclen_seg) {
                 sum += arc;
@@ -902,12 +753,10 @@ namespace turtle::sc {
         ad.arclength = total_arclen;
         ad.segments = arclens;
         ad.positions = arclen_positions;
-
         return ad;
     }
 
     bezier_spline bezier_spline::resample(VectorXf& profile_pos, arclength_data ad, bool nudge_positions=false) const {
-
         // This method of nudging only works well for isolated cases of weird values
         // TODO: consider a more robust way to handle small numerical errors
         if (nudge_positions) {
@@ -921,16 +770,13 @@ namespace turtle::sc {
                 if (profile_pos(i) > ad.arclength) profile_pos(i) = ad.arclength;
             }
         }
-
         SC_ASSERT(profile_pos.rows() > 0, "The vector of positions to be sampled must not be empty");
         // std::cout << "pp mc " << profile_pos.maxCoeff() << std::endl;
         // std::cout << "pp mc2 " << profile_pos(profile_pos.rows() - 2) << std::endl;
         // std::cout << "arklen " << ad.arclength << std::endl;
         SC_ASSERT(profile_pos.maxCoeff() <= ad.arclength, "The profile can not go beyond the arclength of the spline");
         SC_ASSERT(profile_pos.minCoeff() >= 0, "The profile can not go beyond the arclength of the spline");
-
         std::vector<bezier_spline> curves(positions.size());
-
         // std::cout << "ppr " << profile_pos.rows() << std::endl;
         int j = 0;
         float offset = 0;
@@ -951,27 +797,20 @@ namespace turtle::sc {
             // std::cout << "ppj - off2 " << (profile_pos(j) - offset) << std::endl;
             // std::cout << "j " << j << std::endl;
             offset = profile_pos(j);
-
             const VectorXf block = profile_pos.block(start, 0, ((j+1)-start), 1).array() - profile_pos(start);
             block_size_sum += block.rows();
             std::cout << "block size " << block.rows() << std::endl;
             std::cout << "block end " << block(block.rows() - 1) << std::endl;
-
             // const int degree = std::max(seg.rows()/2, 2L);
             const int degree = std::min(10L, seg.rows()); // TODO: figure out a better heuristic for polynomial degree
-
-
             // polynomial from segment arclength to [0,1]
             const chebpoly poly = chebfit(seg, ad.positions[i], degree);
             VectorXf positions_fixed = chebeval(block, poly, degree);
-
             // std::cout << "positions_fixed " << positions_fixed(positions_fixed.rows() - 1) << std::endl;
-
             // std::cout << "degree " << degree << std::endl;
             // std::cout << "ad.positions[0] " << ad.positions[i][0] << std::endl;
             // std::cout << "ad.positions[-1] " << ad.positions[i][ad.positions[i].rows() - 1] << std::endl;
             // std::cout << "ad.positions[max] " << ad.positions[i].maxCoeff() << std::endl;
-
             // std::cout << positions_fixed.minCoeff() << std::endl;
             // std::cout << positions_fixed.rows() << std::endl;
             for (std::size_t i = 0; i < positions_fixed.rows(); ++i) {
@@ -980,20 +819,17 @@ namespace turtle::sc {
                 // std::cout << positions_fixed(i) << std::endl;
             }
             curves[i] = bezier_curve(ctrl_pts[i], positions_fixed, Q_cache[i]);
-
             // std::cout << "curve size " << curves[i].n_pts() << std::endl;
             // std::cout << "curve end " << curves[i].arclength().arclength << std::endl;
             // std::cout << "curve end pos " << curves[i].positions[0](curves[i].positions[0].rows() - 1) << std::endl;
             // std::cout << "-------------" << std::endl;
         }
-
         // float sum = 0;
         // for (auto& curve : curves) {
         //     sum += curve.arclength().arclength;
         //     std::cout << curve.arclength().arclength << std::endl;
         // }
         // std::cout << "sum " << sum << std::endl;
-
         if (block_size_sum > profile_pos.rows()) {
             // remove pts and positions
             const int diff = (block_size_sum - profile_pos.rows());
@@ -1005,7 +841,6 @@ namespace turtle::sc {
             last_curve_last_pos = last_curve_last_pos.block(0, 0, last_curve_last_pos.rows() - diff, 1);
             // std::cout << "die here> " << std::endl;
         }
-
         bezier_spline fixed_spline = join_splines(curves);
         std::cout << "fixed spline " << fixed_spline.n_pts() << " " << profile_pos.rows() << std::endl;
         std::cout << block_size_sum << std::endl;
@@ -1014,7 +849,6 @@ namespace turtle::sc {
         SC_ASSERT(fixed_spline.n_pts() == profile_pos.rows(), "fixed_spline.n_pts() == profile_pos.rows()");
         return fixed_spline;
     }
-
     // std::vector<float> num_diff(std::vector<float> f) {
     //     SC_ASSERT(f.size() >= 3, "");
 
@@ -1024,34 +858,26 @@ namespace turtle::sc {
     //         d[i] =
     //     }
     // }
-
     std::vector<float> bezier_spline::curvature() const {
         bezier_spline d = hodograph();
         bezier_spline dd = d.hodograph();
-
         std::vector<float> res(pts.rows());
         for (std::size_t i = 0; i < pts.rows(); ++i) {
             const Vector3f d_pt(d.pts(i, 0), d.pts(i, 1), 0);
             const Vector3f dd_pt(dd.pts(i, 0), dd.pts(i, 1), 0);
-
             // std::cout << "point 1: " << d_pt.x() << " " << d_pt.y() << std::endl;
             // std::cout << "point 2: " << dd_pt.x() << " " << dd_pt.y() << std::endl;
-
             const float k = (d_pt.x() * dd_pt.y() - d_pt.y() * dd_pt.x()) / std::pow(d_pt.x() * d_pt.x() + d_pt.y() * d_pt.y(), 1.5);
             res[i] = k;
-
             // const Vector3f pt3 = d_pt.cross(dd_pt);
             // std::cout << "point 3: " << pt3.x() << " " << pt3.y() << " " << pt3.z() << std::endl;
-
             // res[i] = d_pt.cross(dd_pt).norm() / std::pow(d_pt.norm(), 3);
         }
-
         return res;
     }
 
     bezier_spline bezier_spline::hodograph() const {
         std::vector<bezier_spline> curves(ctrl_pts.size());
-
         for (std::size_t i = 0; i < ctrl_pts.size(); ++i) {
             std::vector<Vector2f> d_cps(ctrl_pts[i].size()-1);
             for (std::size_t j = 0; j < ctrl_pts[i].size()-1; ++j) {
@@ -1059,17 +885,13 @@ namespace turtle::sc {
             }
             curves[i] = bezier_curve(d_cps, positions[i]);
         }
-
         return join_splines(curves);
     }
 
     std::vector<float> bezier_spline::angular_velocity(const velocity_profile& vel_prof) const {
-
         const std::vector<float> curv = curvature();
         auto&& vels = vel_prof.vel[0];
-
         SC_ASSERT(curv.size() == vel_prof.vel[0].size(), "curvature and velocity vectors must be the same size");
-
         std::vector<float> angular_velocities(curv.size());
         for (std::size_t i = 0; i < angular_velocities.size(); ++i) {
             angular_velocities[i] = vels[i] * curv[i];
@@ -1079,11 +901,8 @@ namespace turtle::sc {
 
     std::vector<float> bezier_spline::angular_velocity2(const velocity_profile& vel_prof) const {
         bezier_spline d = hodograph();
-
         SC_ASSERT(pts.rows() == vel_prof.vel[0].size(), "");
-
         std::vector<float> res(pts.rows());
-
         std::vector<float> rads(pts.rows());
         for (std::size_t i = 0; i < pts.rows(); ++i) {
             Vector3f d_pt(d.pts(i, 0), d.pts(i, 1), 0);
@@ -1092,99 +911,74 @@ namespace turtle::sc {
             std::cout << "rad " << rad << std::endl;
             rads[i] = rad;
         }
-
         res[0] = 0;
         res[res.size() - 1] = 0;
-
         auto&& times = vel_prof.time;
         for (std::size_t i = 1; i < res.size() - 1; ++i) {
             res[i] = (rads[i+1] - rads[i]) / (times[i+1] - times[i]);
         }
-
         return res;
     }
 
     inline std::vector<std::complex<float>> bezier_spline::omega_table(const int degree) {
         using std::complex;
-
         std::vector<std::complex<float>> omegas(degree+1);
         omegas[0] = 1.0f+0if;
         for (std::size_t i = 1; i <= degree; ++i) {
             omegas[i] = pow(exp((complex<float>(std::numbers::pi) * -2if) / complex<float>(degree+1)), i);
         }
-
         return omegas;
     }
-
 
     chebpoly chebfit(const VectorXf& x, const VectorXf& y, const int degree) {
         SC_ASSERT(degree >= 1, "degree must be a positive integer");
         SC_ASSERT(x.rows() == y.rows(), "x and y must have the same number of rows");
-
         const int n = degree;
         const int m = x.rows();
         const float xmax = x.maxCoeff();
         const float xmin = x.minCoeff();
-
         SC_ASSERT(std::abs(xmax - xmin) > 0.00001, "Error: vector x should not have all equal values");
         SC_ASSERT(degree >= 1, "degree must be >= 1");
-
         const VectorXf x_norm = ((2*x).array() - (xmax + xmin)) / (xmax - xmin);
-
         MatrixXf T = MatrixXf::Zero(m, n);
         T.col(0) = VectorXf::Ones(m);
         if (n >= 1) T.col(1) = x_norm;
-
         for (int j = 2; j < n; ++j) {
             T.col(j) = (2*x_norm).array() * T.col(j-1).array() - T.col(j-2).array();
         }
-
         // ColPivHouseholderQR<MatrixXf> T_Qr = T.colPivHouseholderQr();
         // SC_ASSERT(T_Qr.rank() == degree, "");
-
         HouseholderQR<MatrixXf> T_Qr = T.householderQr();
         SC_ASSERT(T.colPivHouseholderQr().rank() == degree, "T.colPivHouseholderQr().rank() == degree");
-
         return chebpoly(T_Qr.solve(y), xmin, xmax);
     }
 
     VectorXf chebeval(const VectorXf& x, const chebpoly& b, const int degree) {
         SC_ASSERT(degree >= 1, "degree must be a positive integer");
-
         const int n = degree;
         const int m = x.rows();
         const float xmax = b.xmax;
         const float xmin = b.xmin;
-
         SC_ASSERT(std::abs(xmax - xmin) > 0.00001, "Error: vector x should not have all equal values");
         SC_ASSERT(degree >= 1, "degree must be >= 1");
-
         const VectorXf x_norm = ((2*x).array() - (xmax + xmin)) / (xmax - xmin);
-
         VectorXf y = VectorXf::Zero(m);
-
         MatrixXf T = MatrixXf::Zero(m, n);
         T.col(0) = VectorXf::Ones(m);
         y += b.coeffs(0) * T.col(0);
-
         if (n >= 1) {
             T.col(1) = x_norm;
             y += b.coeffs(1) * T.col(1);
         }
-
         for (int j = 2; j < n; ++j) {
             T.col(j) = (2*x_norm).array() * T.col(j-1).array() - T.col(j-2).array();
             y += b.coeffs(j) * T.col(j);
         }
-
         return y;
     }
-
     using toppra::value_type;
     using toppra::constraint::LinearJointVelocity;
-
     using vel_lim_func = std::function<std::tuple<toppra::Vector, toppra::Vector>(value_type time)>;
-
     class LinearJointVelocityVarying : public LinearJointVelocity {
         public:
         vel_lim_func calc_lim;
@@ -1197,8 +991,6 @@ namespace turtle::sc {
             std::tie(m_lower, m_upper) = calc_lim(time);
         }
     };
-
-
     template <int N> requires (N >= 1)
     velocity_profile gen_vel_prof(const Vector<value_type, N>& pos_end,
                                   const Vector<value_type, N>& pos_start,
@@ -1210,61 +1002,42 @@ namespace turtle::sc {
                                   const float dt=0.02) {
         using namespace toppra;
         using namespace toppra::constraint;
-
         const int dof = pos_end.rows();
-
         LinearJointVelocityVarying vel_con(dof, vel_lim);
-
         toppra::LinearConstraintPtr ljv, lja;
         ljv = std::make_shared<LinearJointVelocityVarying>(vel_con);
         lja = std::make_shared<toppra::constraint::LinearJointAcceleration>(acc_min, acc_max);
         lja->discretizationType(toppra::DiscretizationType::Interpolation);
         toppra::LinearConstraintPtrs constraints{ljv, lja};
-
         toppra::Vectors positions = {pos_start, pos_end};
-
         toppra::Vectors velocities = {vel_start, vel_end};
-
         std::vector<toppra::value_type> steps;
         steps = std::vector<toppra::value_type>{0, 1};
-
         toppra::PiecewisePolyPath hermite = toppra::PiecewisePolyPath::CubicHermiteSpline(positions, velocities, steps);
-
         toppra::GeometricPathPtr path = std::make_shared<PiecewisePolyPath>(hermite);
-
         toppra::algorithm::TOPPRA algo(constraints, path);
         toppra::ReturnCode rc1 = algo.computePathParametrization(0, 0);
-
         SC_ASSERT(rc1 == toppra::ReturnCode::OK, "");
-
         toppra::ParametrizationData pd = algo.getParameterizationData();
-
         toppra::Vector gridpoints = pd.gridpoints;
         toppra::Vector vsquared = pd.parametrization;
         toppra::parametrizer::Spline spp(path, gridpoints, vsquared);
-
         Eigen::Matrix<toppra::value_type, 1, 2> interval = spp.pathInterval();
-
         int length = std::ceil((interval(1) - interval(0)) / dt);
         // std::cout << "length " << length << std::endl;
         toppra::Vector times = toppra::Vector::LinSpaced(length, interval(0), interval(1));
-
         toppra::Vectors path_pos = spp.eval(times, 0);
         toppra::Vectors path_vel = spp.eval(times, 1);
         toppra::Vectors path_acc = spp.eval(times, 2);
-
         std::vector<VectorXf> pos(dof);
         std::vector<VectorXf> vel(dof);
         std::vector<VectorXf> acc(dof);
-
         for (int j = 0; j < dof; ++j) {
             pos[j] = VectorXf::Zero(length);
             vel[j] = VectorXf::Zero(length);
             acc[j] = VectorXf::Zero(length);
         }
-
         // TODO: there is probably a better way to copy this data
-
         for (int i = 0; i < path_pos.size(); ++i) {
             for (int j = 0; j < dof; ++j) {
                 pos[j](i) = path_pos[i](j);
@@ -1272,17 +1045,9 @@ namespace turtle::sc {
                 acc[j](i) = path_acc[i](j);
             }
         }
-
         return velocity_profile(pos, vel, acc, times);
     }
-
-
-
-
-
-
     planning_space::planning_space(const bounding_rect& br) : bound_rect(br) {}
-
     std::tuple<bool, obstacle> planning_space::is_obstacle(const Vector2f& p) {
         for (auto& obst : obstacles) {
             if (obst.contains(p)) return {true, obst};
@@ -1290,25 +1055,21 @@ namespace turtle::sc {
         obstacle temp;
         return {false, temp};
     }
-
     bool planning_space::is_free_space_allocated(const Vector2f& p) {
         for (auto& free_space_allocation : free_space_allocations) {
             if (free_space_allocation(p)) return true;
         }
         return false;
     }
-
     bool planning_space::is_free(const Vector2f& p) {
         // is not inside an obstacle and is not unknown space
         return !std::get<0>(is_obstacle(p)) && is_free_space_allocated(p);
     }
-
     point_set planning_space::sample_free(const int n) {
         // technically this should be a set, but the halton sequence is guaranteed to not repeat
         // so we can avoid element checks for a set
         point_set pts = {Vector2f(0,0)};
         pts.reserve(n);
-
         while (n > pts.size()) {
             // TODO: consider using different bases, or expose the bases to the user
             //done
@@ -1321,10 +1082,8 @@ namespace turtle::sc {
                 if (is_free(test)) pts.insert(test);
             }
         }
-
         return pts;
     }
-
     inline float planning_space::cost(const Vector2f a, const Vector2f b) const {
         const std::tuple<Vector2f, Vector2f> line = {a, b};
         for (auto& obstacle : obstacles) {
@@ -1334,10 +1093,8 @@ namespace turtle::sc {
                 }
             }
         }
-
         return pt_dist(a, b);
     }
-
     inline point_set planning_space::near(const Vector2f b, const point_set& nodes, const float dist) const {
         point_set nodes_out;
         nodes_out.reserve(nodes.size());
@@ -1348,7 +1105,6 @@ namespace turtle::sc {
         }
         return nodes_out;
     }
-
     std::variant<std::vector<Vector2f>> planning_space::fast_marching_trees(const Vector2f& x_init, const Vector2f& x_goal, const int n, const float rn) {
         // TODO; replace std::optional return type with std::variant + some error type
         //done
@@ -1356,18 +1112,12 @@ namespace turtle::sc {
         point_set V_open = {x_init};
         point_set V_unvisited = sample_free(n);
         V_unvisited.insert(x_goal);
-
         Vector2f z = x_init;
-
         std::unordered_map<Vector2f, std::optional<float>, hash_vector2f> cost_map;
         cost_map.emplace(x_init, std::optional<float>{0});
-
         std::unordered_map<Vector2f, Vector2f, hash_vector2f> parent_map;
         parent_map.emplace(x_init, x_init);
-
-
         const float inf = std::numeric_limits<float>::max();
-
         while (z != x_goal) {
             point_set V_open_new;
             point_set X_near = near(z, V_unvisited, rn);
@@ -1380,24 +1130,19 @@ namespace turtle::sc {
                     const float cost_y = cost_map[y].value_or(inf) + cost(x, y);
                     if (cost_y < cost_y_min) y_min = y;
                 }
-
                 if (cost(x, y_min) != inf) {
                     parent_map.insert_or_assign(x, y_min);
                     V_open_new.insert(x);
                     V_unvisited.erase(x);
                     cost_map.insert_or_assign(x, cost_map[y_min].value_or(inf) + cost(x, y_min));
                 }
-
             }
-
             V_open.merge(V_open_new);
             V_open.erase(z);
             V_closed.insert(z);
-
             if (V_open.size() == 0) {
                 throw std::invalid_argument("x_init results in a v_open size of 0");
             }
-
             z = *V_open.begin();
             for (const auto& y : V_open) {
                 const float cost_z = cost_map[z].value_or(inf);
@@ -1407,9 +1152,7 @@ namespace turtle::sc {
                 }
             }
         }
-
         std::vector<Vector2f> path;
-
         Vector2f p = z;
         while (p != x_init) {
             path.push_back(p);
@@ -1419,8 +1162,6 @@ namespace turtle::sc {
         std::reverse(path.begin(), path.end());
         return std::variant<std::vector<Vector2f>>{path};
     }
-
-
     template <typename T>
     std::vector<T> format_vec_vecx(const std::vector<VectorXf>& prof) {
         std::vector<T> prof_ser;
@@ -1432,24 +1173,19 @@ namespace turtle::sc {
         }
         return prof_ser;
     }
-
     // quick and dirty serialization
     json serialize_path_to_json(const bezier_spline& spline, const velocity_profile& vel_prof, const arclength_data& arclens, const std::vector<float>& ang_vel) {
         json j = json::array();
-
         //j["position"] = format_vec_vecx<float>(vel_prof.pos);
         const std::vector<float> velocities = format_vec_vecx<float>(vel_prof.vel);
         const std::vector<float> accelerations = format_vec_vecx<float>(vel_prof.acc);
         const std::vector<float> times = std::vector<float>(vel_prof.time.data(), vel_prof.time.data() + vel_prof.time.size());
-
         auto&& pts = spline.pts;
         std::vector<float> pos_x = std::vector<float>(pts.col(0).data(), pts.col(0).data() + pts.rows());
         std::vector<float> pos_y = std::vector<float>(pts.col(1).data(), pts.col(1).data() + pts.rows());
-
         // const std::vector<std::vector<float>> segments = format_vec_vecx<float>(arclens.segments);
         // const std::vector<std::vector<float>> positions = format_vec_vecx<float>(arclens.positions);
         // j["arclength"] = { {"arclength", arclens.arclength}, {"segments", segments}, {"positions", positions} };
-
         for (std::size_t i = 0; i < pts.rows(); ++i) {
             json j2;
             j2["time"] = times[i];
@@ -1457,16 +1193,13 @@ namespace turtle::sc {
             j2["acceleration"] = accelerations[i];
             j2["angularVelocity"] = ang_vel[i];
             // j2["curvature"]
-
             // j2["pose"]["rotation"]["radians"] 
             j2["pose"]["translation"]["x"] = pos_x[i];
             j2["pose"]["translation"]["y"] = pos_y[i];
-
             j2["holonomicRotation"] = 0.0;
             j2["holonomicAngularVelocity"] = 0.0;
             j.push_back(j2);
         }
-
         return j;
     }
 }
