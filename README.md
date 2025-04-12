@@ -1,8 +1,17 @@
-# sea-current
-a path planning library
+# Sea-Current
+A path planning library
 
-## dependencies
+## Dependencies
 - Eigen
 - toppra (packaged in tree)
 - nlohmann/json (packaged in tree)
 - matplotlibcpp (for testing only; packaged in tree)
+
+## Getting Started
+- 
+
+## Contributing
+- 
+
+## License
+-  
