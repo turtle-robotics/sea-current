@@ -12,3 +12,8 @@ A path planning library for the the Texas A&M University Robotics Team and Leade
 - toppra (packaged in tree)
 - nlohmann/json (packaged in tree)
 - matplotlibcpp (for testing only; packaged in tree)
+
+## References
+- Numerical Methods Chapter 4
+- Kinodynamic Motion Planning for Mobile Robots Using Splines
+- Efficient Computation of Bezier Curves from their Bernstein-Fourier Representation
